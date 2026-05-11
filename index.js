@@ -48,6 +48,12 @@ async function initDB() {
     )
   `);
 
+  // Index agar query session lebih cepat
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_ad_sessions_code_user
+    ON ad_sessions (code, user_id)
+  `).catch(() => {});
+
   console.log("✅ Database siap.");
 }
 
@@ -119,19 +125,19 @@ async function getStats(userId) {
   const isAdmin = ADMIN_IDS.includes(userId);
 
   if (isAdmin) {
-    const total = await pool.query("SELECT COUNT(*) FROM links");
+    const total   = await pool.query("SELECT COUNT(*) FROM links");
     const totalDl = await pool.query("SELECT COALESCE(SUM(download_count), 0) as total FROM links");
-    const today = await pool.query(
+    const today   = await pool.query(
       "SELECT COUNT(*) FROM links WHERE created_at >= NOW() - INTERVAL '1 day'"
     );
     return {
-      type: "admin",
-      totalLinks: parseInt(total.rows[0].count),
+      type:           "admin",
+      totalLinks:     parseInt(total.rows[0].count),
       totalDownloads: parseInt(totalDl.rows[0].total),
-      todayLinks: parseInt(today.rows[0].count),
+      todayLinks:     parseInt(today.rows[0].count),
     };
   } else {
-    const result = await pool.query(
+    const result  = await pool.query(
       "SELECT code, type, download_count, created_at, expires_at FROM links WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 10",
       [userId]
     );
@@ -140,8 +146,8 @@ async function getStats(userId) {
       [userId]
     );
     return {
-      type: "user",
-      links: result.rows,
+      type:           "user",
+      links:          result.rows,
       totalDownloads: parseInt(totalDl.rows[0].total),
     };
   }
@@ -170,6 +176,10 @@ if (!BOT_TOKEN || !STORAGE_CHANNEL_ID || !BOT_USERNAME) {
   process.exit(1);
 }
 
+if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
+  console.warn("⚠️  PERINGATAN: WEBAPP_URL atau WEBAPP_BACKEND_URL belum diisi — fitur WebApp tidak akan berfungsi!");
+}
+
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 // ─── IN-MEMORY STORE ───────────────────────────────────────────────────────
@@ -181,12 +191,10 @@ function isAllowed(userId) {
   return WHITELIST_USERS.includes(userId) || ADMIN_IDS.includes(userId);
 }
 
-// Link yang dibagikan sekarang ke landing page, bukan ke bot langsung
 function makeShareLink(code) {
   if (LANDING_URL) {
     return `${LANDING_URL}?code=${code}`;
   }
-  // Fallback ke link bot jika LANDING_URL belum diset
   return `https://t.me/${BOT_USERNAME}?start=${code}`;
 }
 
@@ -222,8 +230,25 @@ function formatExpiry(expiresAt) {
   return `⏳ ${hours} jam lagi`;
 }
 
+// ─── FIX: Helper buat session baru ─────────────────────────────────────────
+// Dipanggil setiap kali user buka /start dengan code
+// Selalu insert baru — tidak pakai ON CONFLICT agar tidak miss
+async function createSession(code, userId) {
+  try {
+    await pool.query(
+      `INSERT INTO ad_sessions (code, user_id, verified, expires_at)
+       VALUES ($1, $2, FALSE, NOW() + INTERVAL '30 minutes')`,
+      [code, userId]
+    );
+    console.log(`[SESSION] Dibuat — user: ${userId}, code: ${code}`);
+    return true;
+  } catch (err) {
+    console.error(`[SESSION] Gagal buat session: ${err.message}`);
+    return false;
+  }
+}
+
 // ─── HTTP: /botinfo ────────────────────────────────────────────────────────
-// Landing page fetch endpoint ini untuk tahu username bot yang aktif saat ini
 app.get("/botinfo", (req, res) => {
   res.json({
     username:    BOT_USERNAME,
@@ -245,37 +270,50 @@ app.post("/claim", async (req, res) => {
   const userId = parseInt(user_id);
 
   try {
+    // Ambil session terbaru yang belum verified dan belum expired
     const sessionResult = await pool.query(
-      `SELECT id, verified, expires_at FROM ad_sessions
-       WHERE code = $1 AND user_id = $2
-       ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id FROM ad_sessions
+       WHERE code = $1
+         AND user_id = $2
+         AND verified = FALSE
+         AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
       [code, userId]
     );
 
     if (sessionResult.rows.length === 0) {
-      return res.json({ ok: false, error: "Session tidak ditemukan. Coba buka link lagi." });
+      // Cek apakah sudah pernah verified (sudah diambil)
+      const verifiedCheck = await pool.query(
+        `SELECT id FROM ad_sessions
+         WHERE code = $1 AND user_id = $2 AND verified = TRUE
+         LIMIT 1`,
+        [code, userId]
+      );
+
+      if (verifiedCheck.rows.length > 0) {
+        return res.json({ ok: false, error: "File sudah pernah diambil. Gunakan link baru jika perlu." });
+      }
+
+      return res.json({ ok: false, error: "Session tidak ditemukan atau kadaluarsa. Silakan buka ulang link dari awal." });
     }
 
-    const session = sessionResult.rows[0];
-
-    if (session.verified) {
-      return res.json({ ok: false, error: "File sudah pernah diambil untuk link ini." });
-    }
-
-    if (new Date() > new Date(session.expires_at)) {
-      return res.json({ ok: false, error: "Session kadaluarsa. Silakan buka link lagi." });
-    }
-
+    // Tandai session verified
     await pool.query(
       `UPDATE ad_sessions SET verified = TRUE WHERE id = $1`,
-      [session.id]
+      [sessionResult.rows[0].id]
     );
 
+    // Ambil data link
     const linkData = await getLink(code);
-    if (!linkData || linkData.expired) {
-      return res.json({ ok: false, error: "Link tidak valid atau sudah kadaluarsa." });
+    if (!linkData) {
+      return res.json({ ok: false, error: "Link tidak ditemukan." });
+    }
+    if (linkData.expired) {
+      return res.json({ ok: false, error: "Link sudah kadaluarsa." });
     }
 
+    // Kirim file ke user
     if (linkData.type === "multi") {
       for (const id of linkData.ids) {
         await sendFromStorage(userId, id);
@@ -285,17 +323,17 @@ app.post("/claim", async (req, res) => {
     }
 
     await incrementDownload(code);
-    console.log(`[${new Date().toISOString()}] Code ${code} diambil via WebApp oleh ${userId}`);
+    console.log(`[CLAIM] Berhasil — user: ${userId}, code: ${code}`);
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("Claim error:", err.message);
-    return res.json({ ok: false, error: "Terjadi kesalahan server." });
+    console.error("[CLAIM] Error:", err.message);
+    return res.json({ ok: false, error: "Terjadi kesalahan server. Coba lagi." });
   }
 });
 
 // ─── HTTP: /session ────────────────────────────────────────────────────────
-// Landing page membuat session sebelum redirect ke bot
+// Dipanggil oleh landing page sebelum redirect ke bot
 app.post("/session", async (req, res) => {
   const { code, user_id } = req.body;
 
@@ -316,20 +354,15 @@ app.post("/session", async (req, res) => {
       return res.json({ ok: false, error: "Link sudah kadaluarsa." });
     }
 
-    await pool.query(
-      `INSERT INTO ad_sessions (code, user_id) VALUES ($1, $2)`,
-      [code, userId]
-    );
-
-    return res.json({ ok: true });
+    const ok = await createSession(code, userId);
+    return res.json({ ok });
   } catch (err) {
-    console.error("Session error:", err.message);
+    console.error("[SESSION] Error:", err.message);
     return res.json({ ok: false, error: "Terjadi kesalahan server." });
   }
 });
 
 // ─── HTTP: /linkinfo ───────────────────────────────────────────────────────
-// Landing page fetch info link (jumlah file, status)
 app.get("/linkinfo", async (req, res) => {
   const { code } = req.query;
 
@@ -352,16 +385,15 @@ app.get("/linkinfo", async (req, res) => {
 
     return res.json({ ok: true, fileCount, type: linkData.type });
   } catch (err) {
-    console.error("Linkinfo error:", err.message);
+    console.error("[LINKINFO] Error:", err.message);
     return res.json({ ok: false, error: "Terjadi kesalahan server." });
   }
 });
 
 // Health check
-app.get("/", (req, res) => res.json({ status: "ok" }));
+app.get("/", (req, res) => res.json({ status: "ok", bot: BOT_USERNAME }));
 
 // ─── /start ────────────────────────────────────────────────────────────────
-// Bot tetap handle /start untuk kirim tombol WebApp setelah user dari landing page
 bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -385,18 +417,22 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
     const fileCount = linkData.type === "multi" ? linkData.ids.length : 1;
     const fileLabel = fileCount > 1 ? `${fileCount} file` : "1 file";
 
-    // Session sudah dibuat oleh landing page via /session
-    // Tapi buat lagi sebagai fallback kalau user langsung buka link bot
-    await pool.query(
-      `INSERT INTO ad_sessions (code, user_id) VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [param, userId]
-    ).catch(() => {
-      // Kalau ON CONFLICT tidak support, insert saja
-      pool.query(`INSERT INTO ad_sessions (code, user_id) VALUES ($1, $2)`, [param, userId]).catch(() => {});
-    });
+    // FIX: Selalu buat session baru setiap /start dengan code
+    await createSession(param, userId);
 
-    const webAppUrl = `${WEBAPP_URL}?code=${param}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}`;
+    // Pastikan semua env var lengkap sebelum buat WebApp URL
+    if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
+      return bot.sendMessage(
+        chatId,
+        "❌ Konfigurasi bot belum lengkap. Hubungi admin.",
+        { parse_mode: "Markdown" }
+      );
+    }
+
+    const webAppUrl = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}`;
+
+    console.log(`[START] User ${userId} → code: ${param}`);
+    console.log(`[START] WebApp URL: ${webAppUrl}`);
 
     return bot.sendMessage(
       chatId,
@@ -585,8 +621,8 @@ bot.onText(/\/done/, async (msg) => {
       ? { type: "single", id: session.storedIds[0] }
       : { type: "multi", ids: session.storedIds };
 
-    const code      = await saveLink(linkData, userId);
-    const shareLink = makeShareLink(code);
+    const code       = await saveLink(linkData, userId);
+    const shareLink  = makeShareLink(code);
     const expireDays = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
 
     await bot.deleteMessage(chatId, loadingMsg.message_id);
@@ -605,7 +641,7 @@ bot.onText(/\/done/, async (msg) => {
       }
     );
 
-    console.log(`[${new Date().toISOString()}] Multi ${session.storedIds.length} file oleh ${userId} → code: ${code}`);
+    console.log(`[UPLOAD] Multi ${session.storedIds.length} file oleh ${userId} → code: ${code}`);
   } catch (err) {
     console.error("Error membuat link:", err.message);
     await bot.editMessageText("❌ Gagal membuat link.", {
@@ -717,8 +753,8 @@ bot.on("message", async (msg) => {
 
   try {
     const storedMessageId = await forwardToStorage(chatId, msg.message_id);
-    const code      = await saveLink({ type: "single", id: storedMessageId }, userId);
-    const shareLink = makeShareLink(code);
+    const code       = await saveLink({ type: "single", id: storedMessageId }, userId);
+    const shareLink  = makeShareLink(code);
     const expireDays = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
 
     const fileName =
@@ -744,7 +780,7 @@ bot.on("message", async (msg) => {
       }
     );
 
-    console.log(`[${new Date().toISOString()}] Upload oleh ${userId} → code: ${code}`);
+    console.log(`[UPLOAD] Single file oleh ${userId} → code: ${code}`);
   } catch (err) {
     console.error("Error memproses file:", err.message);
     await bot.editMessageText(
@@ -763,7 +799,9 @@ initDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`🌐 HTTP server berjalan di port ${PORT}`);
-      console.log(`🤖 Bot berjalan... Tekan Ctrl+C untuk berhenti.`);
+      console.log(`🤖 Bot aktif: @${BOT_USERNAME}`);
+      console.log(`🔗 Backend URL: ${WEBAPP_BACKEND_URL}`);
+      console.log(`📱 WebApp URL: ${WEBAPP_URL}`);
     });
   })
   .catch((err) => {
