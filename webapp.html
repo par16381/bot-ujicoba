@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Ambil File</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@400;600;700;800&display=swap');
+
+    :root {
+      --bg:        #0a0f1e;
+      --surface:   #111827;
+      --surface2:  #1a2235;
+      --border:    #1f2f4a;
+      --blue:      #3b82f6;
+      --blue-dim:  #1d4ed8;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --text:      #f1f5f9;
+      --muted:     #64748b;
+      --subtle:    #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    /* ── Phase system ── */
+    .phase { display: none; }
+    .phase.active { display: block; animation: fadeUp 0.35s ease forwards; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Logo / Icon ── */
+    .logo {
+      font-size: 60px;
+      margin-bottom: 10px;
+      display: block;
+      filter: drop-shadow(0 0 24px rgba(59,130,246,0.4));
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--subtle);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    /* ── Timer ── */
+    .timer-wrap {
+      margin-bottom: 24px;
+    }
+
+    .timer-ring {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      margin: 0 auto 16px;
+    }
+
+    .timer-ring svg {
+      position: absolute;
+      inset: 0;
+      transform: rotate(-90deg);
+    }
+
+    .timer-ring svg circle {
+      fill: none;
+      stroke-width: 6;
+    }
+
+    .timer-ring svg .track {
+      stroke: var(--border);
+    }
+
+    .timer-ring svg .fill {
+      stroke: var(--blue);
+      stroke-linecap: round;
+      stroke-dasharray: 408;
+      stroke-dashoffset: 408;
+      transition: stroke-dashoffset 1s linear;
+      filter: drop-shadow(0 0 8px rgba(59,130,246,0.6));
+    }
+
+    .timer-inner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timer-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--blue);
+      line-height: 1;
+      letter-spacing: -2px;
+    }
+
+    .timer-unit {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .timer-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── Info box ── */
+    .info-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: var(--subtle);
+      text-align: left;
+      line-height: 1.6;
+    }
+
+    .info-box strong { color: var(--text); }
+
+    /* ── Steps ── */
+    .steps {
+      margin-bottom: 24px;
+      text-align: left;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--subtle);
+      line-height: 1.5;
+      transition: border-color 0.3s;
+    }
+
+    .step.active-step { border-color: var(--blue); }
+    .step.done-step   { border-color: var(--green); }
+
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--blue-dim);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      transition: background 0.3s;
+    }
+
+    .step-num.done { background: var(--green); }
+
+    /* ── Buttons ── */
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0);
+      transition: background 0.15s;
+    }
+
+    .btn:active:not(:disabled)::after { background: rgba(255,255,255,0.08); }
+    .btn:active:not(:disabled) { transform: scale(0.985); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      box-shadow: 0 4px 20px rgba(59,130,246,0.35);
+    }
+
+    .btn-primary:not(:disabled):hover {
+      box-shadow: 0 4px 28px rgba(59,130,246,0.5);
+    }
+
+    .btn-green {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      box-shadow: 0 4px 20px rgba(34,197,94,0.35);
+    }
+
+    .btn-green:not(:disabled):hover {
+      box-shadow: 0 4px 28px rgba(34,197,94,0.5);
+    }
+
+    .btn-gray {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--subtle);
+    }
+
+    /* ── Error box ── */
+    .error-box {
+      background: #1a0505;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+      text-align: left;
+      line-height: 1.5;
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Success ── */
+    @keyframes popIn {
+      0%   { transform: scale(0.4); opacity: 0; }
+      70%  { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes glow {
+      0%, 100% { filter: drop-shadow(0 0 16px rgba(34,197,94,0.5)); }
+      50%       { filter: drop-shadow(0 0 32px rgba(34,197,94,0.9)); }
+    }
+
+    .success-icon {
+      font-size: 72px;
+      display: block;
+      margin-bottom: 14px;
+      animation: popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards, glow 2s ease-in-out 0.5s infinite;
+    }
+
+    .success-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .success-sub {
+      font-size: 14px;
+      color: var(--subtle);
+      line-height: 1.6;
+    }
+
+    /* ── Note ── */
+    .note {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Loading spinner large ── */
+    .spinner-lg {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto;
+    }
+
+    /* ── Countdown done pulse ── */
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.04); }
+    }
+
+    .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
+
+    /* ── Tag ── */
+    .tag {
+      display: inline-block;
+      background: rgba(59,130,246,0.12);
+      color: var(--blue);
+      border: 1px solid rgba(59,130,246,0.25);
+      border-radius: 99px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <!-- ══ PHASE: LOADING ══ -->
+  <div class="phase active" id="phase-loading">
+    <span class="logo">📦</span>
+    <h1>Memuat...</h1>
+    <p class="subtitle">Menyiapkan file kamu</p>
+    <div class="spinner-lg"></div>
+  </div>
+
+  <!-- ══ PHASE: ERROR ══ -->
+  <div class="phase" id="phase-error">
+    <span class="logo">❌</span>
+    <h1>Gagal</h1>
+    <p class="subtitle" id="error-msg">Terjadi kesalahan.</p>
+  </div>
+
+  <!-- ══ PHASE: TIMER (nonton iklan) ══ -->
+  <div class="phase" id="phase-timer">
+    <span class="tag">LANGKAH 1 DARI 2</span>
+    <span class="logo">⏳</span>
+    <h1>Tunggu Sebentar</h1>
+    <p class="subtitle">Iklan sedang berjalan. Tunggu timer selesai<br>untuk mengaktifkan tombol ambil file.</p>
+
+    <div class="timer-wrap">
+      <div class="timer-ring">
+        <svg viewBox="0 0 140 140" width="140" height="140">
+          <circle class="track" cx="70" cy="70" r="65"/>
+          <circle class="fill"  cx="70" cy="70" r="65" id="ring-fill"/>
+        </svg>
+        <div class="timer-inner">
+          <div class="timer-num" id="timer-num">--</div>
+          <div class="timer-unit">detik</div>
+        </div>
+      </div>
+      <div class="timer-label" id="timer-label">Membuka iklan...</div>
+    </div>
+
+    <div class="error-box" id="timer-error"></div>
+
+    <button class="btn btn-green" id="btn-claim" disabled>
+      🔒 Tunggu Timer Selesai
+    </button>
+
+    <p class="note">⚠️ Jangan tutup halaman ini sebelum mengambil file</p>
+  </div>
+
+  <!-- ══ PHASE: CLAIMING ══ -->
+  <div class="phase" id="phase-claiming">
+    <span class="logo">📡</span>
+    <h1>Mengirim File...</h1>
+    <p class="subtitle">Bot sedang mengirimkan file ke chat kamu</p>
+    <div class="spinner-lg"></div>
+  </div>
+
+  <!-- ══ PHASE: SUCCESS ══ -->
+  <div class="phase" id="phase-success">
+    <span class="success-icon">✅</span>
+    <div class="success-title">File Terkirim!</div>
+    <p class="success-sub">
+      File sudah dikirim ke chat Telegram kamu.<br>
+      Silakan cek chat dengan bot.
+    </p>
+    <br>
+    <div class="info-box" style="text-align:center;">
+      <strong>📱 Buka chat bot untuk melihat file</strong>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  WEBAPP.HTML — Telegram WebApp untuk ambil file
+//  Dibuka di dalam Telegram via tombol WebApp
+// ════════════════════════════════════════════════════════════
+
+// ── Ambil params dari URL ──────────────────────────────────
+const params      = new URLSearchParams(location.search);
+const code        = params.get('code');
+const waitSeconds = parseInt(params.get('wait'))    || 20;
+const adUrl       = params.get('ad')               || '';
+const backendUrl  = params.get('backend')          || '';
+
+// ── Telegram WebApp SDK ────────────────────────────────────
+const tg     = window.Telegram?.WebApp;
+const userId = tg?.initDataUnsafe?.user?.id || null;
+
+// ── State ──────────────────────────────────────────────────
+let timerInterval = null;
+let timeLeft      = waitSeconds;
+let timerDone     = false;
+
+// ── Helpers ───────────────────────────────────────────────
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  showPhase('phase-error');
+}
+
+function setTimerError(msg) {
+  const box = document.getElementById('timer-error');
+  box.textContent = msg;
+  box.style.display = msg ? 'block' : 'none';
+}
+
+// ── Ring progress ──────────────────────────────────────────
+const CIRCUMFERENCE = 2 * Math.PI * 65; // ≈ 408.41
+
+function updateRing(secondsLeft, total) {
+  const ring     = document.getElementById('ring-fill');
+  const progress = 1 - (secondsLeft / total);
+  ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+}
+
+// ── Timer countdown ────────────────────────────────────────
+function startTimer() {
+  const numEl   = document.getElementById('timer-num');
+  const labelEl = document.getElementById('timer-label');
+  const btnEl   = document.getElementById('btn-claim');
+
+  numEl.textContent = timeLeft;
+  updateRing(timeLeft, waitSeconds);
+  labelEl.textContent = 'Iklan sedang berjalan...';
+
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    numEl.textContent = timeLeft;
+    updateRing(timeLeft, waitSeconds);
+
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      timerDone = true;
+
+      numEl.textContent     = '✓';
+      labelEl.textContent   = 'Timer selesai! Kamu bisa ambil file sekarang.';
+      labelEl.style.color   = 'var(--green)';
+
+      // Update ring to full green
+      const ring = document.getElementById('ring-fill');
+      ring.style.stroke           = 'var(--green)';
+      ring.style.filter           = 'drop-shadow(0 0 8px rgba(34,197,94,0.6))';
+      ring.style.strokeDashoffset = '0';
+
+      btnEl.disabled   = false;
+      btnEl.innerHTML  = '🎁 Ambil File Sekarang';
+      btnEl.classList.add('btn-pulse');
+    }
+  }, 1000);
+}
+
+// ── Buka iklan ─────────────────────────────────────────────
+function openAd() {
+  if (!adUrl) return;
+  try {
+    if (tg?.openLink) {
+      tg.openLink(adUrl);
+    } else {
+      window.open(adUrl, '_blank');
+    }
+  } catch(e) {
+    console.warn('Gagal buka iklan:', e);
+  }
+}
+
+// ── Claim file ─────────────────────────────────────────────
+async function claimFile() {
+  if (!timerDone) return;
+
+  const btn = document.getElementById('btn-claim');
+  btn.disabled  = true;
+  btn.innerHTML = '<div class="spinner"></div> Memproses...';
+  btn.classList.remove('btn-pulse');
+  setTimerError('');
+
+  if (!userId) {
+    setTimerError('❌ Tidak bisa mendeteksi akun Telegram kamu. Pastikan kamu membuka halaman ini dari dalam Telegram.');
+    btn.disabled  = false;
+    btn.innerHTML = '🎁 Ambil File Sekarang';
+    btn.classList.add('btn-pulse');
+    return;
+  }
+
+  if (!code) {
+    setTimerError('❌ Kode file tidak ditemukan.');
+    btn.disabled  = false;
+    btn.innerHTML = '🎁 Ambil File Sekarang';
+    btn.classList.add('btn-pulse');
+    return;
+  }
+
+  showPhase('phase-claiming');
+
+  try {
+    const res = await fetch(`${backendUrl}/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, user_id: userId })
+    });
+
+    const data = await res.json();
+
+    if (data.ok) {
+      showPhase('phase-success');
+      // Beri tahu Telegram WebApp selesai (opsional)
+      setTimeout(() => tg?.close?.(), 4000);
+    } else {
+      showPhase('phase-timer');
+      setTimerError(`❌ ${data.error || 'Gagal mengambil file. Coba lagi.'}`);
+
+      btn.disabled  = false;
+      btn.innerHTML = '🎁 Ambil File Sekarang';
+      btn.classList.add('btn-pulse');
+    }
+  } catch (err) {
+    console.error('Claim error:', err);
+    showPhase('phase-timer');
+    setTimerError('❌ Gagal terhubung ke server. Periksa koneksi internet.');
+
+    btn.disabled  = false;
+    btn.innerHTML = '🎁 Ambil File Sekarang';
+    btn.classList.add('btn-pulse');
+  }
+}
+
+// ── Event listeners ────────────────────────────────────────
+document.getElementById('btn-claim').addEventListener('click', claimFile);
+
+// ── Init ───────────────────────────────────────────────────
+async function init() {
+  // Inisialisasi Telegram WebApp
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+
+  // Validasi parameter wajib
+  if (!code) {
+    showError('Parameter code tidak ditemukan. Pastikan kamu membuka link yang benar.');
+    return;
+  }
+
+  if (!backendUrl) {
+    showError('Konfigurasi backend tidak ditemukan. Hubungi admin bot.');
+    return;
+  }
+
+  // Cek link masih valid
+  try {
+    const res  = await fetch(`${backendUrl}/linkinfo?code=${code}`);
+    const data = await res.json();
+
+    if (!data.ok) {
+      if (data.expired) {
+        showError('Link sudah kadaluarsa. Minta link baru kepada pengirim.');
+      } else {
+        showError(data.error || 'Link tidak valid atau tidak ditemukan.');
+      }
+      return;
+    }
+
+    // Semua OK — tampilkan fase timer
+    showPhase('phase-timer');
+
+    // Buka iklan
+    openAd();
+
+    // Mulai timer
+    startTimer();
+
+  } catch (err) {
+    console.error('Init error:', err);
+    showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
