@@ -35,7 +35,6 @@
       overflow-x: hidden;
     }
 
-    /* Animated background grid */
     body::before {
       content: '';
       position: fixed;
@@ -56,7 +55,6 @@
       text-align: center;
     }
 
-    /* ── Phase system ── */
     .phase { display: none; }
     .phase.active { display: block; animation: fadeUp 0.35s ease forwards; }
 
@@ -65,7 +63,6 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Logo / Icon ── */
     .logo {
       font-size: 60px;
       margin-bottom: 10px;
@@ -88,9 +85,7 @@
     }
 
     /* ── Timer ── */
-    .timer-wrap {
-      margin-bottom: 24px;
-    }
+    .timer-wrap { margin-bottom: 24px; }
 
     .timer-ring {
       position: relative;
@@ -105,15 +100,8 @@
       transform: rotate(-90deg);
     }
 
-    .timer-ring svg circle {
-      fill: none;
-      stroke-width: 6;
-    }
-
-    .timer-ring svg .track {
-      stroke: var(--border);
-    }
-
+    .timer-ring svg circle { fill: none; stroke-width: 6; }
+    .timer-ring svg .track { stroke: var(--border); }
     .timer-ring svg .fill {
       stroke: var(--blue);
       stroke-linecap: round;
@@ -149,10 +137,7 @@
       letter-spacing: 1px;
     }
 
-    .timer-label {
-      font-size: 13px;
-      color: var(--muted);
-    }
+    .timer-label { font-size: 13px; color: var(--muted); }
 
     /* ── Info box ── */
     .info-box {
@@ -168,48 +153,6 @@
     }
 
     .info-box strong { color: var(--text); }
-
-    /* ── Steps ── */
-    .steps {
-      margin-bottom: 24px;
-      text-align: left;
-    }
-
-    .step {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 8px;
-      font-size: 13px;
-      color: var(--subtle);
-      line-height: 1.5;
-      transition: border-color 0.3s;
-    }
-
-    .step.active-step { border-color: var(--blue); }
-    .step.done-step   { border-color: var(--green); }
-
-    .step-num {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: var(--blue-dim);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 12px;
-      flex-shrink: 0;
-      margin-top: 1px;
-      transition: background 0.3s;
-    }
-
-    .step-num.done { background: var(--green); }
 
     /* ── Buttons ── */
     .btn {
@@ -232,15 +175,6 @@
       overflow: hidden;
     }
 
-    .btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: rgba(255,255,255,0);
-      transition: background 0.15s;
-    }
-
-    .btn:active:not(:disabled)::after { background: rgba(255,255,255,0.08); }
     .btn:active:not(:disabled) { transform: scale(0.985); }
     .btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -249,23 +183,9 @@
       box-shadow: 0 4px 20px rgba(59,130,246,0.35);
     }
 
-    .btn-primary:not(:disabled):hover {
-      box-shadow: 0 4px 28px rgba(59,130,246,0.5);
-    }
-
     .btn-green {
       background: linear-gradient(135deg, #22c55e, #16a34a);
       box-shadow: 0 4px 20px rgba(34,197,94,0.35);
-    }
-
-    .btn-green:not(:disabled):hover {
-      box-shadow: 0 4px 28px rgba(34,197,94,0.5);
-    }
-
-    .btn-gray {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--subtle);
     }
 
     /* ── Error box ── */
@@ -295,6 +215,17 @@
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Loading spinner large ── */
+    .spinner-lg {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto;
+    }
 
     /* ── Success ── */
     @keyframes popIn {
@@ -328,7 +259,6 @@
       line-height: 1.6;
     }
 
-    /* ── Note ── */
     .note {
       font-size: 11px;
       color: var(--muted);
@@ -336,18 +266,6 @@
       line-height: 1.5;
     }
 
-    /* ── Loading spinner large ── */
-    .spinner-lg {
-      width: 40px;
-      height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 20px auto;
-    }
-
-    /* ── Countdown done pulse ── */
     @keyframes pulse {
       0%, 100% { transform: scale(1); }
       50%       { transform: scale(1.04); }
@@ -355,7 +273,6 @@
 
     .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
 
-    /* ── Tag ── */
     .tag {
       display: inline-block;
       background: rgba(59,130,246,0.12);
@@ -388,7 +305,7 @@
     <p class="subtitle" id="error-msg">Terjadi kesalahan.</p>
   </div>
 
-  <!-- ══ PHASE: TIMER (nonton iklan) ══ -->
+  <!-- ══ PHASE: TIMER ══ -->
   <div class="phase" id="phase-timer">
     <span class="tag">LANGKAH 1 DARI 2</span>
     <span class="logo">⏳</span>
@@ -448,23 +365,37 @@
 //  Dibuka di dalam Telegram via tombol WebApp
 // ════════════════════════════════════════════════════════════
 
-// ── Ambil params dari URL ──────────────────────────────────
-const params      = new URLSearchParams(location.search);
-const code        = params.get('code');
-const waitSeconds = parseInt(params.get('wait'))    || 20;
-const adUrl       = params.get('ad')               || '';
-const backendUrl  = params.get('backend')          || '';
+// ── FIX: Fallback URL backend jika param kosong ────────────────────────────
+// Ganti nilai FALLBACK_BACKEND ini dengan URL Railway kamu
+const FALLBACK_BACKEND = "https://bot-ujicoba-production.up.railway.app";
 
-// ── Telegram WebApp SDK ────────────────────────────────────
+// ── Ambil params dari URL ──────────────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const code   = params.get('code');
+
+// FIX: decode dulu karena bot melakukan encodeURIComponent saat membuat URL
+const waitSeconds = parseInt(params.get('wait'))                         || 20;
+const adUrl       = decodeURIComponent(params.get('ad')        || '')    || '';
+const backendUrl  = decodeURIComponent(params.get('backend')   || '')    || FALLBACK_BACKEND;
+
+// ── Telegram WebApp SDK ────────────────────────────────────────────────────
 const tg     = window.Telegram?.WebApp;
 const userId = tg?.initDataUnsafe?.user?.id || null;
 
-// ── State ──────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────────────────
 let timerInterval = null;
 let timeLeft      = waitSeconds;
 let timerDone     = false;
 
-// ── Helpers ───────────────────────────────────────────────
+// ── Debug log (bisa dilihat di Telegram DevTools atau console browser) ─────
+console.log('[WEBAPP] Init params:');
+console.log('  code:', code);
+console.log('  waitSeconds:', waitSeconds);
+console.log('  adUrl:', adUrl);
+console.log('  backendUrl:', backendUrl);
+console.log('  userId:', userId);
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 function showPhase(id) {
   document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -477,11 +408,11 @@ function showError(msg) {
 
 function setTimerError(msg) {
   const box = document.getElementById('timer-error');
-  box.textContent = msg;
-  box.style.display = msg ? 'block' : 'none';
+  box.textContent    = msg;
+  box.style.display  = msg ? 'block' : 'none';
 }
 
-// ── Ring progress ──────────────────────────────────────────
+// ── Ring progress ──────────────────────────────────────────────────────────
 const CIRCUMFERENCE = 2 * Math.PI * 65; // ≈ 408.41
 
 function updateRing(secondsLeft, total) {
@@ -490,15 +421,17 @@ function updateRing(secondsLeft, total) {
   ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
 }
 
-// ── Timer countdown ────────────────────────────────────────
+// ── Timer countdown ────────────────────────────────────────────────────────
 function startTimer() {
   const numEl   = document.getElementById('timer-num');
   const labelEl = document.getElementById('timer-label');
   const btnEl   = document.getElementById('btn-claim');
 
-  numEl.textContent = timeLeft;
+  timeLeft = waitSeconds; // reset setiap kali dipanggil
+  numEl.textContent   = timeLeft;
   updateRing(timeLeft, waitSeconds);
   labelEl.textContent = 'Iklan sedang berjalan...';
+  labelEl.style.color = '';
 
   timerInterval = setInterval(() => {
     timeLeft--;
@@ -509,40 +442,49 @@ function startTimer() {
       clearInterval(timerInterval);
       timerDone = true;
 
-      numEl.textContent     = '✓';
-      labelEl.textContent   = 'Timer selesai! Kamu bisa ambil file sekarang.';
-      labelEl.style.color   = 'var(--green)';
+      numEl.textContent   = '✓';
+      labelEl.textContent = 'Timer selesai! Kamu bisa ambil file sekarang.';
+      labelEl.style.color = 'var(--green)';
 
-      // Update ring to full green
       const ring = document.getElementById('ring-fill');
       ring.style.stroke           = 'var(--green)';
       ring.style.filter           = 'drop-shadow(0 0 8px rgba(34,197,94,0.6))';
       ring.style.strokeDashoffset = '0';
 
-      btnEl.disabled   = false;
-      btnEl.innerHTML  = '🎁 Ambil File Sekarang';
+      btnEl.disabled  = false;
+      btnEl.innerHTML = '🎁 Ambil File Sekarang';
       btnEl.classList.add('btn-pulse');
+
+      console.log('[WEBAPP] Timer selesai, tombol claim aktif');
     }
   }, 1000);
 }
 
-// ── Buka iklan ─────────────────────────────────────────────
+// ── Buka iklan ─────────────────────────────────────────────────────────────
 function openAd() {
-  if (!adUrl) return;
+  if (!adUrl) {
+    console.log('[WEBAPP] adUrl kosong, skip buka iklan');
+    return;
+  }
   try {
     if (tg?.openLink) {
       tg.openLink(adUrl);
+      console.log('[WEBAPP] Iklan dibuka via tg.openLink');
     } else {
       window.open(adUrl, '_blank');
+      console.log('[WEBAPP] Iklan dibuka via window.open');
     }
   } catch(e) {
-    console.warn('Gagal buka iklan:', e);
+    console.warn('[WEBAPP] Gagal buka iklan:', e);
   }
 }
 
-// ── Claim file ─────────────────────────────────────────────
+// ── Claim file ─────────────────────────────────────────────────────────────
 async function claimFile() {
-  if (!timerDone) return;
+  if (!timerDone) {
+    console.warn('[WEBAPP] claimFile dipanggil sebelum timer selesai');
+    return;
+  }
 
   const btn = document.getElementById('btn-claim');
   btn.disabled  = true;
@@ -550,7 +492,9 @@ async function claimFile() {
   btn.classList.remove('btn-pulse');
   setTimerError('');
 
+  // Validasi userId
   if (!userId) {
+    console.error('[WEBAPP] userId tidak ditemukan dari Telegram SDK');
     setTimerError('❌ Tidak bisa mendeteksi akun Telegram kamu. Pastikan kamu membuka halaman ini dari dalam Telegram.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
@@ -558,6 +502,7 @@ async function claimFile() {
     return;
   }
 
+  // Validasi code
   if (!code) {
     setTimerError('❌ Kode file tidak ditemukan.');
     btn.disabled  = false;
@@ -566,20 +511,22 @@ async function claimFile() {
     return;
   }
 
+  console.log(`[WEBAPP] Mengirim claim — code: ${code}, userId: ${userId}, backend: ${backendUrl}`);
   showPhase('phase-claiming');
 
   try {
     const res = await fetch(`${backendUrl}/claim`, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, user_id: userId })
+      body:    JSON.stringify({ code, user_id: userId }),
     });
 
     const data = await res.json();
+    console.log('[WEBAPP] Claim response:', data);
 
     if (data.ok) {
       showPhase('phase-success');
-      // Beri tahu Telegram WebApp selesai (opsional)
+      // Auto close WebApp setelah 4 detik
       setTimeout(() => tg?.close?.(), 4000);
     } else {
       showPhase('phase-timer');
@@ -590,7 +537,7 @@ async function claimFile() {
       btn.classList.add('btn-pulse');
     }
   } catch (err) {
-    console.error('Claim error:', err);
+    console.error('[WEBAPP] Claim network error:', err);
     showPhase('phase-timer');
     setTimerError('❌ Gagal terhubung ke server. Periksa koneksi internet.');
 
@@ -600,10 +547,10 @@ async function claimFile() {
   }
 }
 
-// ── Event listeners ────────────────────────────────────────
+// ── Event listeners ────────────────────────────────────────────────────────
 document.getElementById('btn-claim').addEventListener('click', claimFile);
 
-// ── Init ───────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
   // Inisialisasi Telegram WebApp
   if (tg) {
@@ -622,10 +569,14 @@ async function init() {
     return;
   }
 
-  // Cek link masih valid
+  // Cek link masih valid di backend
   try {
-    const res  = await fetch(`${backendUrl}/linkinfo?code=${code}`);
+    console.log(`[WEBAPP] Fetch linkinfo: ${backendUrl}/linkinfo?code=${code}`);
+
+    const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
     const data = await res.json();
+
+    console.log('[WEBAPP] Linkinfo response:', data);
 
     if (!data.ok) {
       if (data.expired) {
@@ -636,17 +587,13 @@ async function init() {
       return;
     }
 
-    // Semua OK — tampilkan fase timer
+    // Semua OK — tampilkan fase timer, buka iklan, mulai countdown
     showPhase('phase-timer');
-
-    // Buka iklan
     openAd();
-
-    // Mulai timer
     startTimer();
 
   } catch (err) {
-    console.error('Init error:', err);
+    console.error('[WEBAPP] Init error:', err);
     showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
   }
 }
