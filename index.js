@@ -180,7 +180,15 @@ if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
   console.warn("⚠️  PERINGATAN: WEBAPP_URL atau WEBAPP_BACKEND_URL belum diisi — fitur WebApp tidak akan berfungsi!");
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(BOT_TOKEN, {
+  polling: {
+    params: { timeout: 30, allowed_updates: [] },
+  },
+});
+
+bot.getUpdates({ offset: -1 }).then(() => {
+  console.log("🧹 Pending updates dibersihkan.");
+}).catch(() => {});
 
 // ─── IN-MEMORY STORE ───────────────────────────────────────────────────────
 const multiMode = new Map();
