@@ -266,6 +266,7 @@
   const waitSeconds = parseInt(params.get('wait'))    || 20;
   const adUrl       = decodeURIComponent(params.get('ad')      || '');
   const backendUrl  = decodeURIComponent(params.get('backend') || '');
+  const botUsername = params.get('bot') || '';
 
   // ── Telegram WebApp SDK ───────────────────────────────
   const tg     = window.Telegram?.WebApp;
@@ -433,18 +434,17 @@
   $('btn-main').addEventListener('click', handleMainBtn);
 
   $('btn-back-bot').addEventListener('click', () => {
-    if (tg?.close) {
-      tg.close(); // Tutup WebApp → kembali ke chat bot
-    } else {
-      // Fallback jika bukan Telegram WebApp
-      window.close();
-    }
-  });
-
-  $('btn-back-bot').addEventListener('click', () => {
+    // Coba tg.close() dulu (bekerja di mobile)
     if (tg?.close) {
       tg.close();
     }
+    // Fallback untuk desktop: redirect ke chat bot
+    setTimeout(() => {
+      const botLink = botUsername
+        ? `https://t.me/${botUsername}`
+        : null;
+      if (botLink) window.open(botLink, '_blank');
+    }, 300);
   });
 
   // ── INIT ──────────────────────────────────────────────
