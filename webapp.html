@@ -285,6 +285,22 @@
       letter-spacing: 0.5px;
       margin-bottom: 12px;
     }
+
+    /* ── Debug box (hidden in prod, shown if error) ── */
+    .debug-box {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      color: #6b7280;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-family: monospace;
+      text-align: left;
+      margin-top: 12px;
+      line-height: 1.6;
+      word-break: break-all;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -303,6 +319,7 @@
     <span class="logo">❌</span>
     <h1>Gagal</h1>
     <p class="subtitle" id="error-msg">Terjadi kesalahan.</p>
+    <div class="debug-box" id="debug-box"></div>
   </div>
 
   <!-- ══ PHASE: TIMER ══ -->
@@ -362,67 +379,61 @@
 <script>
 // ════════════════════════════════════════════════════════════
 //  WEBAPP.HTML — Telegram WebApp untuk ambil file
-//  Dibuka di dalam Telegram via tombol WebApp
 // ════════════════════════════════════════════════════════════
 
-// ── FIX: Fallback URL backend jika param kosong ────────────────────────────
-// Ganti nilai FALLBACK_BACKEND ini dengan URL Railway kamu
 const FALLBACK_BACKEND = "https://bot-ujicoba-production.up.railway.app";
 
-// ── Ambil params dari URL ──────────────────────────────────────────────────
-const params = new URLSearchParams(location.search);
-const code   = params.get('code');
+// ── Ambil params dari URL ──────────────────────────────────
+const params      = new URLSearchParams(location.search);
+const code        = params.get('code')     || '';
+const waitSeconds = parseInt(params.get('wait'))  || 20;
+const adUrl       = decodeURIComponent(params.get('ad')      || '');
+const backendUrl  = decodeURIComponent(params.get('backend') || '') || FALLBACK_BACKEND;
 
-// FIX: decode dulu karena bot melakukan encodeURIComponent saat membuat URL
-const waitSeconds = parseInt(params.get('wait'))                         || 20;
-const adUrl       = decodeURIComponent(params.get('ad')        || '')    || '';
-const backendUrl  = decodeURIComponent(params.get('backend')   || '')    || FALLBACK_BACKEND;
-
-// ── Telegram WebApp SDK ────────────────────────────────────────────────────
-const tg     = window.Telegram?.WebApp;
-const params = new URLSearchParams(location.search);
-
-  // Prioritas: URL param (dari bot) → SDK (fallback)
+// ── userId: URL param (dari bot) → SDK (fallback) ──────────
+const tg            = window.Telegram?.WebApp;
 const userIdFromUrl = parseInt(params.get('uid')) || null;
 const userIdFromSdk = tg?.initDataUnsafe?.user?.id || null;
 const userId        = userIdFromUrl || userIdFromSdk;
 
-console.log('[WEBAPP] userId from URL:', userIdFromUrl);
-console.log('[WEBAPP] userId from SDK:', userIdFromSdk);
-console.log('[WEBAPP] userId used:', userId);
-
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────
 let timerInterval = null;
 let timeLeft      = waitSeconds;
 let timerDone     = false;
 
-// ── Debug log (bisa dilihat di Telegram DevTools atau console browser) ─────
-console.log('[WEBAPP] Init params:');
-console.log('  code:', code);
-console.log('  waitSeconds:', waitSeconds);
-console.log('  adUrl:', adUrl);
-console.log('  backendUrl:', backendUrl);
-console.log('  userId:', userId);
+// ── Console log (debug) ────────────────────────────────────
+console.log('[WEBAPP] code:', code);
+console.log('[WEBAPP] waitSeconds:', waitSeconds);
+console.log('[WEBAPP] adUrl:', adUrl);
+console.log('[WEBAPP] backendUrl:', backendUrl);
+console.log('[WEBAPP] userId from URL:', userIdFromUrl);
+console.log('[WEBAPP] userId from SDK:', userIdFromSdk);
+console.log('[WEBAPP] userId used:', userId);
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────
 function showPhase(id) {
   document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-function showError(msg) {
+function showError(msg, debugInfo) {
   document.getElementById('error-msg').textContent = msg;
+  if (debugInfo) {
+    const box = document.getElementById('debug-box');
+    box.textContent  = debugInfo;
+    box.style.display = 'block';
+  }
   showPhase('phase-error');
 }
 
 function setTimerError(msg) {
   const box = document.getElementById('timer-error');
-  box.textContent    = msg;
-  box.style.display  = msg ? 'block' : 'none';
+  box.textContent   = msg;
+  box.style.display = msg ? 'block' : 'none';
 }
 
-// ── Ring progress ──────────────────────────────────────────────────────────
-const CIRCUMFERENCE = 2 * Math.PI * 65; // ≈ 408.41
+// ── Ring progress ──────────────────────────────────────────
+const CIRCUMFERENCE = 2 * Math.PI * 65;
 
 function updateRing(secondsLeft, total) {
   const ring     = document.getElementById('ring-fill');
@@ -430,13 +441,13 @@ function updateRing(secondsLeft, total) {
   ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
 }
 
-// ── Timer countdown ────────────────────────────────────────────────────────
+// ── Timer countdown ────────────────────────────────────────
 function startTimer() {
   const numEl   = document.getElementById('timer-num');
   const labelEl = document.getElementById('timer-label');
   const btnEl   = document.getElementById('btn-claim');
 
-  timeLeft = waitSeconds; // reset setiap kali dipanggil
+  timeLeft = waitSeconds;
   numEl.textContent   = timeLeft;
   updateRing(timeLeft, waitSeconds);
   labelEl.textContent = 'Iklan sedang berjalan...';
@@ -469,31 +480,26 @@ function startTimer() {
   }, 1000);
 }
 
-// ── Buka iklan ─────────────────────────────────────────────────────────────
+// ── Buka iklan ─────────────────────────────────────────────
 function openAd() {
   if (!adUrl) {
-    console.log('[WEBAPP] adUrl kosong, skip buka iklan');
+    console.log('[WEBAPP] adUrl kosong, skip');
     return;
   }
   try {
     if (tg?.openLink) {
       tg.openLink(adUrl);
-      console.log('[WEBAPP] Iklan dibuka via tg.openLink');
     } else {
       window.open(adUrl, '_blank');
-      console.log('[WEBAPP] Iklan dibuka via window.open');
     }
   } catch(e) {
     console.warn('[WEBAPP] Gagal buka iklan:', e);
   }
 }
 
-// ── Claim file ─────────────────────────────────────────────────────────────
+// ── Claim file ─────────────────────────────────────────────
 async function claimFile() {
-  if (!timerDone) {
-    console.warn('[WEBAPP] claimFile dipanggil sebelum timer selesai');
-    return;
-  }
+  if (!timerDone) return;
 
   const btn = document.getElementById('btn-claim');
   btn.disabled  = true;
@@ -501,26 +507,24 @@ async function claimFile() {
   btn.classList.remove('btn-pulse');
   setTimerError('');
 
-  // Validasi userId
   if (!userId) {
-    console.error('[WEBAPP] userId tidak ditemukan dari Telegram SDK');
-    setTimerError('❌ Tidak bisa mendeteksi akun Telegram kamu. Pastikan kamu membuka halaman ini dari dalam Telegram.');
+    console.error('[WEBAPP] userId null. URL param:', userIdFromUrl, '| SDK:', userIdFromSdk);
+    setTimerError('❌ Tidak dapat mendeteksi akun Telegram. Coba tutup dan buka ulang dari bot.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
     return;
   }
 
-  // Validasi code
   if (!code) {
-    setTimerError('❌ Kode file tidak ditemukan.');
+    setTimerError('❌ Kode file tidak ditemukan di URL.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
     return;
   }
 
-  console.log(`[WEBAPP] Mengirim claim — code: ${code}, userId: ${userId}, backend: ${backendUrl}`);
+  console.log('[WEBAPP] Claim — code:', code, 'userId:', userId, 'backend:', backendUrl);
   showPhase('phase-claiming');
 
   try {
@@ -535,12 +539,10 @@ async function claimFile() {
 
     if (data.ok) {
       showPhase('phase-success');
-      // Auto close WebApp setelah 4 detik
       setTimeout(() => tg?.close?.(), 4000);
     } else {
       showPhase('phase-timer');
       setTimerError(`❌ ${data.error || 'Gagal mengambil file. Coba lagi.'}`);
-
       btn.disabled  = false;
       btn.innerHTML = '🎁 Ambil File Sekarang';
       btn.classList.add('btn-pulse');
@@ -549,27 +551,27 @@ async function claimFile() {
     console.error('[WEBAPP] Claim network error:', err);
     showPhase('phase-timer');
     setTimerError('❌ Gagal terhubung ke server. Periksa koneksi internet.');
-
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
   }
 }
 
-// ── Event listeners ────────────────────────────────────────────────────────
+// ── Event listeners ────────────────────────────────────────
 document.getElementById('btn-claim').addEventListener('click', claimFile);
 
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────
 async function init() {
-  // Inisialisasi Telegram WebApp
   if (tg) {
     tg.ready();
     tg.expand();
   }
 
-  // Validasi parameter wajib
   if (!code) {
-    showError('Parameter code tidak ditemukan. Pastikan kamu membuka link yang benar.');
+    showError(
+      'Parameter code tidak ditemukan. Pastikan kamu membuka link yang benar.',
+      'URL: ' + location.href
+    );
     return;
   }
 
@@ -578,9 +580,9 @@ async function init() {
     return;
   }
 
-  // Cek link masih valid di backend
+  // Validasi link ke backend
   try {
-    console.log(`[WEBAPP] Fetch linkinfo: ${backendUrl}/linkinfo?code=${code}`);
+    console.log('[WEBAPP] Fetch linkinfo:', backendUrl + '/linkinfo?code=' + code);
 
     const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
     const data = await res.json();
@@ -596,14 +598,17 @@ async function init() {
       return;
     }
 
-    // Semua OK — tampilkan fase timer, buka iklan, mulai countdown
+    // Semua OK
     showPhase('phase-timer');
     openAd();
     startTimer();
 
   } catch (err) {
-    console.error('[WEBAPP] Init error:', err);
-    showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
+    console.error('[WEBAPP] Init fetch error:', err);
+    showError(
+      'Gagal terhubung ke server. Periksa koneksi internet kamu.',
+      'Backend: ' + backendUrl + '\nError: ' + err.message
+    );
   }
 }
 
