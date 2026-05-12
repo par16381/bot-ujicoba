@@ -8,17 +8,14 @@
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@400;600;700;800&display=swap');
 
     :root {
-      --bg:        #0a0f1e;
-      --surface:   #111827;
-      --surface2:  #1a2235;
-      --border:    #1f2f4a;
-      --blue:      #3b82f6;
-      --blue-dim:  #1d4ed8;
-      --green:     #22c55e;
-      --red:       #ef4444;
-      --text:      #f1f5f9;
-      --muted:     #64748b;
-      --subtle:    #94a3b8;
+      --bg:      #0a0f1e;
+      --surface: #111827;
+      --border:  #1f2f4a;
+      --blue:    #3b82f6;
+      --green:   #22c55e;
+      --text:    #f1f5f9;
+      --muted:   #64748b;
+      --subtle:  #94a3b8;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -59,15 +56,15 @@
     .phase.active { display: block; animation: fadeUp 0.35s ease forwards; }
 
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
+      from { opacity: 0; transform: translateY(14px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
     .logo {
-      font-size: 60px;
-      margin-bottom: 10px;
+      font-size: 58px;
       display: block;
-      filter: drop-shadow(0 0 24px rgba(59,130,246,0.4));
+      margin-bottom: 10px;
+      filter: drop-shadow(0 0 20px rgba(59,130,246,0.35));
     }
 
     h1 {
@@ -80,198 +77,9 @@
     .subtitle {
       font-size: 13px;
       color: var(--subtle);
-      line-height: 1.6;
-      margin-bottom: 28px;
+      line-height: 1.65;
+      margin-bottom: 24px;
     }
-
-    /* ── Timer ── */
-    .timer-wrap { margin-bottom: 24px; }
-
-    .timer-ring {
-      position: relative;
-      width: 140px;
-      height: 140px;
-      margin: 0 auto 16px;
-    }
-
-    .timer-ring svg {
-      position: absolute;
-      inset: 0;
-      transform: rotate(-90deg);
-    }
-
-    .timer-ring svg circle { fill: none; stroke-width: 6; }
-    .timer-ring svg .track { stroke: var(--border); }
-    .timer-ring svg .fill {
-      stroke: var(--blue);
-      stroke-linecap: round;
-      stroke-dasharray: 408;
-      stroke-dashoffset: 408;
-      transition: stroke-dashoffset 1s linear;
-      filter: drop-shadow(0 0 8px rgba(59,130,246,0.6));
-    }
-
-    .timer-inner {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .timer-num {
-      font-family: 'Space Mono', monospace;
-      font-size: 44px;
-      font-weight: 700;
-      color: var(--blue);
-      line-height: 1;
-      letter-spacing: -2px;
-    }
-
-    .timer-unit {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 4px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .timer-label { font-size: 13px; color: var(--muted); }
-
-    /* ── Info box ── */
-    .info-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px 16px;
-      margin-bottom: 20px;
-      font-size: 13px;
-      color: var(--subtle);
-      text-align: left;
-      line-height: 1.6;
-    }
-
-    .info-box strong { color: var(--text); }
-
-    /* ── Buttons ── */
-    .btn {
-      width: 100%;
-      padding: 16px;
-      border: none;
-      border-radius: 14px;
-      font-family: 'Sora', sans-serif;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      color: #fff;
-      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .btn:active:not(:disabled) { transform: scale(0.985); }
-    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
-      box-shadow: 0 4px 20px rgba(59,130,246,0.35);
-    }
-
-    .btn-green {
-      background: linear-gradient(135deg, #22c55e, #16a34a);
-      box-shadow: 0 4px 20px rgba(34,197,94,0.35);
-    }
-
-    /* ── Error box ── */
-    .error-box {
-      background: #1a0505;
-      border: 1px solid #7f1d1d;
-      color: #fca5a5;
-      border-radius: 12px;
-      padding: 14px 16px;
-      font-size: 13px;
-      margin-bottom: 16px;
-      display: none;
-      text-align: left;
-      line-height: 1.5;
-    }
-
-    /* ── Spinner ── */
-    .spinner {
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      border: 2.5px solid rgba(255,255,255,0.25);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      flex-shrink: 0;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Loading spinner large ── */
-    .spinner-lg {
-      width: 40px;
-      height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 20px auto;
-    }
-
-    /* ── Success ── */
-    @keyframes popIn {
-      0%   { transform: scale(0.4); opacity: 0; }
-      70%  { transform: scale(1.15); }
-      100% { transform: scale(1); opacity: 1; }
-    }
-
-    @keyframes glow {
-      0%, 100% { filter: drop-shadow(0 0 16px rgba(34,197,94,0.5)); }
-      50%       { filter: drop-shadow(0 0 32px rgba(34,197,94,0.9)); }
-    }
-
-    .success-icon {
-      font-size: 72px;
-      display: block;
-      margin-bottom: 14px;
-      animation: popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards, glow 2s ease-in-out 0.5s infinite;
-    }
-
-    .success-title {
-      font-size: 24px;
-      font-weight: 800;
-      color: var(--green);
-      margin-bottom: 8px;
-    }
-
-    .success-sub {
-      font-size: 14px;
-      color: var(--subtle);
-      line-height: 1.6;
-    }
-
-    .note {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 14px;
-      line-height: 1.5;
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50%       { transform: scale(1.04); }
-    }
-
-    .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
 
     .tag {
       display: inline-block;
@@ -286,27 +94,162 @@
       margin-bottom: 12px;
     }
 
-    /* ── Debug box (hidden in prod, shown if error) ── */
-    .debug-box {
-      background: #0a0a0a;
-      border: 1px solid #333;
-      color: #6b7280;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 11px;
-      font-family: monospace;
+    .info-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+      font-size: 13px;
+      color: var(--subtle);
       text-align: left;
-      margin-top: 12px;
       line-height: 1.6;
-      word-break: break-all;
+    }
+    .info-box strong { color: var(--text); }
+
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      transition: opacity 0.2s, transform 0.15s;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn:active:not(:disabled) { transform: scale(0.985); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-green { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 18px rgba(34,197,94,0.3); }
+    .btn-tg    { background: linear-gradient(135deg, #229ED9, #1a7ab5); box-shadow: 0 4px 18px rgba(34,158,217,0.3); }
+
+    .error-box {
+      background: #1a0505;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      margin-bottom: 14px;
       display: none;
+      text-align: left;
+      line-height: 1.5;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    .spinner-lg {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .timer-wrap { margin-bottom: 22px; }
+    .timer-ring {
+      position: relative;
+      width: 140px; height: 140px;
+      margin: 0 auto 14px;
+    }
+    .timer-ring svg {
+      position: absolute; inset: 0;
+      transform: rotate(-90deg);
+    }
+    .timer-ring svg circle { fill: none; stroke-width: 6; }
+    .timer-ring svg .track { stroke: var(--border); }
+    .timer-ring svg .fill {
+      stroke: var(--blue);
+      stroke-linecap: round;
+      stroke-dasharray: 408;
+      stroke-dashoffset: 408;
+      transition: stroke-dashoffset 1s linear;
+    }
+    .timer-inner {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .timer-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 44px; font-weight: 700;
+      color: var(--blue);
+      line-height: 1; letter-spacing: -2px;
+    }
+    .timer-unit {
+      font-size: 11px; color: var(--muted);
+      margin-top: 4px;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .timer-label { font-size: 13px; color: var(--muted); }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.04); }
+    }
+    .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
+
+    @keyframes popIn {
+      0%   { transform: scale(0.4); opacity: 0; }
+      70%  { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .success-icon {
+      font-size: 72px; display: block;
+      margin-bottom: 14px;
+      animation: popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    }
+    .success-title {
+      font-size: 24px; font-weight: 800;
+      color: var(--green); margin-bottom: 8px;
+    }
+    .success-sub {
+      font-size: 14px; color: var(--subtle); line-height: 1.6;
+    }
+    .note {
+      font-size: 11px; color: var(--muted);
+      margin-top: 14px; line-height: 1.5;
+    }
+
+    #tg-login-wrap {
+      display: flex;
+      justify-content: center;
+      margin: 4px 0 16px;
+      min-height: 50px;
+      align-items: center;
+    }
+
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 2px 0 14px;
+      color: var(--muted); font-size: 12px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1; height: 1px;
+      background: var(--border);
     }
   </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- ══ PHASE: LOADING ══ -->
+  <!-- PHASE: LOADING -->
   <div class="phase active" id="phase-loading">
     <span class="logo">📦</span>
     <h1>Memuat...</h1>
@@ -314,15 +257,40 @@
     <div class="spinner-lg"></div>
   </div>
 
-  <!-- ══ PHASE: ERROR ══ -->
+  <!-- PHASE: ERROR -->
   <div class="phase" id="phase-error">
     <span class="logo">❌</span>
     <h1>Gagal</h1>
     <p class="subtitle" id="error-msg">Terjadi kesalahan.</p>
-    <div class="debug-box" id="debug-box"></div>
   </div>
 
-  <!-- ══ PHASE: TIMER ══ -->
+  <!-- PHASE: LOGIN (browser biasa, belum ada userId) -->
+  <div class="phase" id="phase-login">
+    <span class="logo">🔐</span>
+    <h1>Login dengan Telegram</h1>
+    <p class="subtitle">
+      Untuk mengambil file ini, login dengan akun Telegram kamu terlebih dahulu.
+    </p>
+
+    <div class="info-box">
+      <strong>📦 File siap diambil</strong><br>
+      Login sekali, lalu ikuti timer singkat untuk mendapatkan file langsung ke chat Telegram kamu.
+    </div>
+
+    <div id="tg-login-wrap">
+      <div class="spinner-lg" style="margin:0;width:28px;height:28px;border-width:2px;"></div>
+    </div>
+
+    <div class="divider">atau buka via Telegram</div>
+
+    <button class="btn btn-tg" id="btn-open-tg">
+      ✈️ Buka Link di Telegram
+    </button>
+
+    <p class="note">Login aman via Telegram OAuth. Kami tidak menyimpan data sensitif.</p>
+  </div>
+
+  <!-- PHASE: TIMER -->
   <div class="phase" id="phase-timer">
     <span class="tag">LANGKAH 1 DARI 2</span>
     <span class="logo">⏳</span>
@@ -333,7 +301,7 @@
       <div class="timer-ring">
         <svg viewBox="0 0 140 140" width="140" height="140">
           <circle class="track" cx="70" cy="70" r="65"/>
-          <circle class="fill"  cx="70" cy="70" r="65" id="ring-fill"/>
+          <circle class="fill" cx="70" cy="70" r="65" id="ring-fill"/>
         </svg>
         <div class="timer-inner">
           <div class="timer-num" id="timer-num">--</div>
@@ -352,7 +320,7 @@
     <p class="note">⚠️ Jangan tutup halaman ini sebelum mengambil file</p>
   </div>
 
-  <!-- ══ PHASE: CLAIMING ══ -->
+  <!-- PHASE: CLAIMING -->
   <div class="phase" id="phase-claiming">
     <span class="logo">📡</span>
     <h1>Mengirim File...</h1>
@@ -360,7 +328,7 @@
     <div class="spinner-lg"></div>
   </div>
 
-  <!-- ══ PHASE: SUCCESS ══ -->
+  <!-- PHASE: SUCCESS -->
   <div class="phase" id="phase-success">
     <span class="success-icon">✅</span>
     <div class="success-title">File Terkirim!</div>
@@ -377,89 +345,71 @@
 </div>
 
 <script>
-// ════════════════════════════════════════════════════════════
-//  WEBAPP.HTML — Telegram WebApp untuk ambil file
-// ════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  UNIFIED WEBAPP — bekerja di Telegram WebApp & browser
+// ══════════════════════════════════════════════════════════
 
+// ── CONFIG — sesuaikan dengan bot kamu ───────────────────
 const FALLBACK_BACKEND = "https://bot-ujicoba-production.up.railway.app";
+const BOT_USERNAME     = "ujicoba1111_bot";  // tanpa @
+// ─────────────────────────────────────────────────────────
 
-// ── Ambil params dari URL ──────────────────────────────────
 const params      = new URLSearchParams(location.search);
-const code        = params.get('code')     || '';
-const waitSeconds = parseInt(params.get('wait'))  || 20;
+const code        = params.get('code')    || '';
+const waitSeconds = parseInt(params.get('wait')) || 20;
 const adUrl       = decodeURIComponent(params.get('ad')      || '');
 const backendUrl  = decodeURIComponent(params.get('backend') || '') || FALLBACK_BACKEND;
 
-// ── userId: URL param (dari bot) → SDK (fallback) ──────────
 const tg            = window.Telegram?.WebApp;
+const isTgApp       = !!(tg && tg.initData && tg.initData.length > 0);
 const userIdFromUrl = parseInt(params.get('uid')) || null;
-const userIdFromSdk = tg?.initDataUnsafe?.user?.id || null;
-const userId        = userIdFromUrl || userIdFromSdk;
+const userIdFromSdk = isTgApp ? (tg?.initDataUnsafe?.user?.id || null) : null;
+let   userId        = userIdFromUrl || userIdFromSdk || null;
 
-// ── State ──────────────────────────────────────────────────
-let timerInterval = null;
-let timeLeft      = waitSeconds;
-let timerDone     = false;
+let timerDone = false;
+const CIRC    = 2 * Math.PI * 65; // ~408
 
-// ── Console log (debug) ────────────────────────────────────
-console.log('[WEBAPP] code:', code);
-console.log('[WEBAPP] waitSeconds:', waitSeconds);
-console.log('[WEBAPP] adUrl:', adUrl);
-console.log('[WEBAPP] backendUrl:', backendUrl);
-console.log('[WEBAPP] userId from URL:', userIdFromUrl);
-console.log('[WEBAPP] userId from SDK:', userIdFromSdk);
-console.log('[WEBAPP] userId used:', userId);
+console.log('[WEBAPP] isTgApp:', isTgApp, '| userId:', userId, '| code:', code);
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────
 function showPhase(id) {
-  document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.phase').forEach(e => e.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-function showError(msg, debugInfo) {
+function showError(msg) {
   document.getElementById('error-msg').textContent = msg;
-  if (debugInfo) {
-    const box = document.getElementById('debug-box');
-    box.textContent  = debugInfo;
-    box.style.display = 'block';
-  }
   showPhase('phase-error');
 }
 
 function setTimerError(msg) {
-  const box = document.getElementById('timer-error');
-  box.textContent   = msg;
-  box.style.display = msg ? 'block' : 'none';
+  const b = document.getElementById('timer-error');
+  b.textContent = msg;
+  b.style.display = msg ? 'block' : 'none';
 }
 
-// ── Ring progress ──────────────────────────────────────────
-const CIRCUMFERENCE = 2 * Math.PI * 65;
-
-function updateRing(secondsLeft, total) {
-  const ring     = document.getElementById('ring-fill');
-  const progress = 1 - (secondsLeft / total);
-  ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+function updateRing(left, total) {
+  document.getElementById('ring-fill').style.strokeDashoffset =
+    CIRC * (left / total);
 }
 
-// ── Timer countdown ────────────────────────────────────────
+// ── Timer ─────────────────────────────────────────────────
 function startTimer() {
   const numEl   = document.getElementById('timer-num');
   const labelEl = document.getElementById('timer-label');
-  const btnEl   = document.getElementById('btn-claim');
+  const btn     = document.getElementById('btn-claim');
+  let   left    = waitSeconds;
 
-  timeLeft = waitSeconds;
-  numEl.textContent   = timeLeft;
-  updateRing(timeLeft, waitSeconds);
-  labelEl.textContent = 'Iklan sedang berjalan...';
-  labelEl.style.color = '';
+  numEl.textContent = left;
+  updateRing(left, waitSeconds);
 
-  timerInterval = setInterval(() => {
-    timeLeft--;
-    numEl.textContent = timeLeft;
-    updateRing(timeLeft, waitSeconds);
+  const iv = setInterval(() => {
+    left--;
+    numEl.textContent = left;
+    updateRing(left, waitSeconds);
 
-    if (timeLeft <= 0) {
-      clearInterval(timerInterval);
+    if (left <= 0) {
+      clearInterval(iv);
       timerDone = true;
 
       numEl.textContent   = '✓';
@@ -468,36 +418,46 @@ function startTimer() {
 
       const ring = document.getElementById('ring-fill');
       ring.style.stroke           = 'var(--green)';
-      ring.style.filter           = 'drop-shadow(0 0 8px rgba(34,197,94,0.6))';
       ring.style.strokeDashoffset = '0';
 
-      btnEl.disabled  = false;
-      btnEl.innerHTML = '🎁 Ambil File Sekarang';
-      btnEl.classList.add('btn-pulse');
-
-      console.log('[WEBAPP] Timer selesai, tombol claim aktif');
+      btn.disabled  = false;
+      btn.innerHTML = '🎁 Ambil File Sekarang';
+      btn.classList.add('btn-pulse');
     }
   }, 1000);
 }
 
-// ── Buka iklan ─────────────────────────────────────────────
+// ── Buka iklan ────────────────────────────────────────────
 function openAd() {
-  if (!adUrl) {
-    console.log('[WEBAPP] adUrl kosong, skip');
-    return;
-  }
+  if (!adUrl) return;
   try {
-    if (tg?.openLink) {
-      tg.openLink(adUrl);
-    } else {
-      window.open(adUrl, '_blank');
+    if (tg?.openLink) tg.openLink(adUrl);
+    else window.open(adUrl, '_blank');
+  } catch(e) { /* ignore */ }
+}
+
+// ── Cek link & mulai timer ────────────────────────────────
+async function startProcess() {
+  try {
+    const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
+    const data = await res.json();
+
+    if (!data.ok) {
+      showError(data.expired
+        ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
+        : (data.error || 'Link tidak valid.'));
+      return;
     }
-  } catch(e) {
-    console.warn('[WEBAPP] Gagal buka iklan:', e);
+
+    showPhase('phase-timer');
+    openAd();
+    startTimer();
+  } catch(err) {
+    showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
   }
 }
 
-// ── Claim file ─────────────────────────────────────────────
+// ── Claim ─────────────────────────────────────────────────
 async function claimFile() {
   if (!timerDone) return;
 
@@ -508,34 +468,22 @@ async function claimFile() {
   setTimerError('');
 
   if (!userId) {
-    console.error('[WEBAPP] userId null. URL param:', userIdFromUrl, '| SDK:', userIdFromSdk);
-    setTimerError('❌ Tidak dapat mendeteksi akun Telegram. Coba tutup dan buka ulang dari bot.');
+    setTimerError('❌ Sesi tidak ditemukan. Coba tutup dan buka ulang link dari awal.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
     return;
   }
 
-  if (!code) {
-    setTimerError('❌ Kode file tidak ditemukan di URL.');
-    btn.disabled  = false;
-    btn.innerHTML = '🎁 Ambil File Sekarang';
-    btn.classList.add('btn-pulse');
-    return;
-  }
-
-  console.log('[WEBAPP] Claim — code:', code, 'userId:', userId, 'backend:', backendUrl);
   showPhase('phase-claiming');
 
   try {
-    const res = await fetch(`${backendUrl}/claim`, {
+    const res  = await fetch(`${backendUrl}/claim`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ code, user_id: userId }),
     });
-
     const data = await res.json();
-    console.log('[WEBAPP] Claim response:', data);
 
     if (data.ok) {
       showPhase('phase-success');
@@ -547,68 +495,84 @@ async function claimFile() {
       btn.innerHTML = '🎁 Ambil File Sekarang';
       btn.classList.add('btn-pulse');
     }
-  } catch (err) {
-    console.error('[WEBAPP] Claim network error:', err);
+  } catch(err) {
     showPhase('phase-timer');
-    setTimerError('❌ Gagal terhubung ke server. Periksa koneksi internet.');
+    setTimerError('❌ Gagal terhubung ke server.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
   }
 }
 
-// ── Event listeners ────────────────────────────────────────
+// ── Telegram Login Widget callback ────────────────────────
+// Dipanggil otomatis setelah user login di browser
+window.onTelegramAuth = function(user) {
+  userId = user.id;
+  console.log('[WEBAPP] OAuth login:', user.id, user.first_name);
+
+  // Buat session di backend karena masuk via browser (bukan /start bot)
+  fetch(`${backendUrl}/session`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ code, user_id: userId }),
+  })
+  .then(r => r.json())
+  .then(() => startProcess())
+  .catch(()  => startProcess()); // tetap lanjut meski session gagal
+};
+
+// ── Inject Telegram Login Widget ──────────────────────────
+function injectWidget() {
+  const wrap = document.getElementById('tg-login-wrap');
+  wrap.innerHTML = '';
+  const s = document.createElement('script');
+  s.async = true;
+  s.src   = 'https://telegram.org/js/telegram-widget.js?22';
+  s.setAttribute('data-telegram-login', BOT_USERNAME);
+  s.setAttribute('data-size',           'large');
+  s.setAttribute('data-radius',         '10');
+  s.setAttribute('data-onauth',         'onTelegramAuth(user)');
+  s.setAttribute('data-request-access', 'write');
+  wrap.appendChild(s);
+}
+
+// ── Tombol buka via Telegram ──────────────────────────────
+document.getElementById('btn-open-tg').addEventListener('click', () => {
+  window.open(`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`, '_blank');
+});
+
 document.getElementById('btn-claim').addEventListener('click', claimFile);
 
-// ── Init ───────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────
 async function init() {
-  if (tg) {
-    tg.ready();
-    tg.expand();
-  }
+  if (tg) { tg.ready(); tg.expand(); }
 
   if (!code) {
-    showError(
-      'Parameter code tidak ditemukan. Pastikan kamu membuka link yang benar.',
-      'URL: ' + location.href
-    );
+    showError('Parameter code tidak ditemukan di URL.');
     return;
   }
 
-  if (!backendUrl) {
-    showError('Konfigurasi backend tidak ditemukan. Hubungi admin bot.');
-    return;
-  }
+  if (userId) {
+    // Mode Telegram WebApp — langsung proses
+    await startProcess();
+  } else {
+    // Mode browser — validasi link dulu, baru tampilkan login
+    try {
+      const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
 
-  // Validasi link ke backend
-  try {
-    console.log('[WEBAPP] Fetch linkinfo:', backendUrl + '/linkinfo?code=' + code);
-
-    const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
-    const data = await res.json();
-
-    console.log('[WEBAPP] Linkinfo response:', data);
-
-    if (!data.ok) {
-      if (data.expired) {
-        showError('Link sudah kadaluarsa. Minta link baru kepada pengirim.');
-      } else {
-        showError(data.error || 'Link tidak valid atau tidak ditemukan.');
+      if (!data.ok) {
+        showError(data.expired
+          ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
+          : (data.error || 'Link tidak valid.'));
+        return;
       }
-      return;
+
+      showPhase('phase-login');
+      injectWidget();
+    } catch(err) {
+      showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
     }
-
-    // Semua OK
-    showPhase('phase-timer');
-    openAd();
-    startTimer();
-
-  } catch (err) {
-    console.error('[WEBAPP] Init fetch error:', err);
-    showError(
-      'Gagal terhubung ke server. Periksa koneksi internet kamu.',
-      'Backend: ' + backendUrl + '\nError: ' + err.message
-    );
   }
 }
 
