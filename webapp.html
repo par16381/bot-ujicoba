@@ -3,27 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Ambil File</title>
+  <title>Membuka Telegram...</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@400;600;700;800&display=swap');
-
-    :root {
-      --bg:      #0a0f1e;
-      --surface: #111827;
-      --border:  #1f2f4a;
-      --blue:    #3b82f6;
-      --green:   #22c55e;
-      --text:    #f1f5f9;
-      --muted:   #64748b;
-      --subtle:  #94a3b8;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;700;800&display=swap');
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Sora', sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background: #0a0f1e;
+      color: #f1f5f9;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -38,517 +27,175 @@
         linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
       background-size: 40px 40px;
-      pointer-events: none; z-index: 0;
+      pointer-events: none;
     }
 
     .card {
-      position: relative; z-index: 1;
-      width: 100%; max-width: 400px;
+      position: relative;
       text-align: center;
+      max-width: 360px;
+      width: 100%;
     }
 
-    /* ── Phases ── */
-    .phase { display: none; }
-    .phase.active { display: block; animation: fadeUp 0.3s ease forwards; }
+    .icon {
+      font-size: 64px;
+      display: block;
+      margin-bottom: 16px;
+      animation: float 2s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-8px); }
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    p {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    /* Spinner dots */
+    .dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #3b82f6;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; background: #60a5fa; }
+    .dot:nth-child(3) { animation-delay: 0.4s; background: #93c5fd; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+
+    /* Tombol fallback — tersembunyi dulu, muncul setelah 3 detik */
+    .btn {
+      display: none;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #229ED9, #1a7ab5);
+      box-shadow: 0 4px 16px rgba(34,158,217,0.3);
+      color: #fff;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .btn:active { transform: scale(0.985); }
+    .btn.show { display: flex; animation: fadeUp 0.4s ease forwards; }
+
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(12px); }
+      from { opacity: 0; transform: translateY(10px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Typography ── */
-    .logo { font-size: 56px; display: block; margin-bottom: 10px; }
-    h1 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
-    .sub { font-size: 13px; color: var(--subtle); line-height: 1.65; margin-bottom: 22px; }
+    .note {
+      font-size: 11px;
+      color: #334155;
+      margin-top: 14px;
+      display: none;
+    }
+    .note.show { display: block; }
 
-    .tag {
-      display: inline-block;
-      background: rgba(59,130,246,0.12);
-      color: var(--blue);
-      border: 1px solid rgba(59,130,246,0.25);
-      border-radius: 99px;
-      padding: 3px 10px; font-size: 11px; font-weight: 600;
-      letter-spacing: 0.5px; margin-bottom: 12px;
+    /* Error state */
+    .err {
+      display: none;
+      background: #1a0505;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      border-radius: 11px;
+      padding: 12px 14px;
+      font-size: 13px;
+      margin-top: 16px;
+      line-height: 1.5;
     }
-
-    /* ── Info & Steps ── */
-    .info-box {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 13px 15px;
-      margin-bottom: 16px; font-size: 13px;
-      color: var(--subtle); text-align: left; line-height: 1.6;
-    }
-    .info-box strong { color: var(--text); }
-
-    .steps { margin-bottom: 22px; text-align: left; }
-    .step {
-      display: flex; align-items: flex-start; gap: 11px;
-      padding: 11px 13px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 11px; margin-bottom: 8px;
-      font-size: 13px; color: var(--subtle); line-height: 1.5;
-      transition: border-color 0.3s;
-    }
-    .step.done   { border-color: var(--green); }
-    .step.active { border-color: var(--blue); }
-    .step-num {
-      width: 24px; height: 24px; border-radius: 50%;
-      background: var(--border); color: var(--subtle);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
-      transition: background 0.3s, color 0.3s;
-    }
-    .step.done   .step-num { background: var(--green); color: #fff; }
-    .step.active .step-num { background: var(--blue);  color: #fff; }
-    .step strong { color: var(--text); }
-
-    /* ── Buttons ── */
-    .btn {
-      width: 100%; padding: 15px; border: none; border-radius: 14px;
-      font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700;
-      cursor: pointer; color: #fff;
-      transition: opacity 0.2s, transform 0.15s;
-      margin-bottom: 10px;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-    }
-    .btn:active:not(:disabled) { transform: scale(0.985); }
-    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-    .btn-blue  { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 4px 16px rgba(59,130,246,0.3); }
-    .btn-green { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 16px rgba(34,197,94,0.3); }
-    .btn-tg    { background: linear-gradient(135deg, #229ED9, #1a7ab5); box-shadow: 0 4px 16px rgba(34,158,217,0.3); }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50%       { transform: scale(1.03); }
-    }
-    .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
-
-    /* ── Error ── */
-    .err-box {
-      background: #1a0505; border: 1px solid #7f1d1d; color: #fca5a5;
-      border-radius: 11px; padding: 12px 14px; font-size: 13px;
-      margin-bottom: 14px; display: none; text-align: left; line-height: 1.5;
-    }
-
-    /* ── Spinner ── */
-    .spinner {
-      display: inline-block; width: 18px; height: 18px;
-      border: 2.5px solid rgba(255,255,255,0.25); border-top-color: #fff;
-      border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
-    }
-    .spinner-lg {
-      width: 40px; height: 40px;
-      border: 3px solid var(--border); border-top-color: var(--blue);
-      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 20px auto;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Timer ring ── */
-    .timer-wrap { margin-bottom: 20px; }
-    .timer-ring { position: relative; width: 130px; height: 130px; margin: 0 auto 12px; }
-    .timer-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-    .timer-ring svg circle { fill: none; stroke-width: 6; }
-    .timer-ring svg .track { stroke: var(--border); }
-    .timer-ring svg .fill {
-      stroke: var(--blue); stroke-linecap: round;
-      stroke-dasharray: 377; stroke-dashoffset: 377;
-      transition: stroke-dashoffset 1s linear, stroke 0.5s;
-    }
-    .timer-inner {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-    }
-    .timer-num {
-      font-family: 'Space Mono', monospace;
-      font-size: 40px; font-weight: 700;
-      color: var(--blue); line-height: 1; letter-spacing: -2px;
-    }
-    .timer-unit {
-      font-size: 10px; color: var(--muted);
-      margin-top: 3px; text-transform: uppercase; letter-spacing: 1px;
-    }
-    .timer-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
-
-    /* ── Success ── */
-    @keyframes popIn {
-      0%   { transform: scale(0.4); opacity: 0; }
-      70%  { transform: scale(1.12); }
-      100% { transform: scale(1); opacity: 1; }
-    }
-    .success-icon {
-      font-size: 70px; display: block; margin-bottom: 12px;
-      animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    }
-    .success-title { font-size: 22px; font-weight: 800; color: var(--green); margin-bottom: 8px; }
-    .success-sub   { font-size: 13px; color: var(--subtle); line-height: 1.6; margin-bottom: 20px; }
-
-    .note { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+    .err.show { display: block; }
   </style>
 </head>
 <body>
 <div class="card">
+  <span class="icon">✈️</span>
+  <h1>Membuka Telegram...</h1>
+  <p>Kamu akan diarahkan ke bot Telegram secara otomatis.</p>
 
-  <!-- ══ LOADING ══ -->
-  <div class="phase active" id="phase-loading">
-    <span class="logo">📦</span>
-    <h1>Memuat...</h1>
-    <p class="sub">Menyiapkan file kamu</p>
-    <div class="spinner-lg"></div>
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
   </div>
 
-  <!-- ══ ERROR ══ -->
-  <div class="phase" id="phase-error">
-    <span class="logo">❌</span>
-    <h1>Ups!</h1>
-    <p class="sub" id="err-msg">Terjadi kesalahan.</p>
-  </div>
-
-  <!-- ══ MAIN (satu tampilan untuk semua mode) ══ -->
-  <div class="phase" id="phase-main">
-
-    <span class="logo">📦</span>
-    <h1 id="main-title">Ambil File</h1>
-    <p class="sub" id="main-sub">Ikuti langkah di bawah untuk mendapatkan file kamu</p>
-
-    <!-- Info file -->
-    <div class="info-box" id="file-info">
-      <strong>📄 File siap diambil</strong><br>
-      Selesaikan langkah di bawah untuk mendapatkan file ke Telegram kamu.
-    </div>
-
-    <!-- Step tracker -->
-    <div class="steps" id="steps-wrap">
-      <div class="step active" id="step1">
-        <div class="step-num">1</div>
-        <div>Klik <strong>Buka Iklan</strong> — iklan terbuka di tab baru</div>
-      </div>
-      <div class="step" id="step2">
-        <div class="step-num">2</div>
-        <div>Kembali ke sini &amp; tunggu <strong>timer selesai</strong></div>
-      </div>
-      <div class="step" id="step3">
-        <div class="step-num">3</div>
-        <div id="step3-text">Klik <strong>Ambil File</strong> — file dikirim ke Telegram kamu</div>
-      </div>
-    </div>
-
-    <!-- Timer (tersembunyi sampai iklan diklik) -->
-    <div class="timer-wrap" id="timer-wrap" style="display:none;">
-      <div class="timer-ring">
-        <svg viewBox="0 0 130 130" width="130" height="130">
-          <circle class="track" cx="65" cy="65" r="60"/>
-          <circle class="fill"  cx="65" cy="65" r="60" id="ring-fill"/>
-        </svg>
-        <div class="timer-inner">
-          <div class="timer-num" id="timer-num">--</div>
-          <div class="timer-unit">detik</div>
-        </div>
-      </div>
-      <div class="timer-lbl" id="timer-lbl">Iklan sedang berjalan...</div>
-    </div>
-
-    <!-- Error dalam proses -->
-    <div class="err-box" id="main-err"></div>
-
-    <!-- Tombol utama — berubah sesuai state -->
-    <button class="btn btn-blue" id="btn-main">
-      🚀 Buka Iklan &amp; Mulai
-    </button>
-
-    <p class="note" id="main-note">Iklan mendukung layanan file gratis ini</p>
-  </div>
-
-  <!-- ══ SUCCESS (Telegram WebApp — file sudah terkirim via bot) ══ -->
-  <div class="phase" id="phase-success-tg">
-    <span class="success-icon">✅</span>
-    <div class="success-title">File Terkirim!</div>
-    <p class="success-sub">File sudah dikirim ke chat Telegram kamu.<br>Silakan cek chat dengan bot.</p>
-    <div class="info-box" style="text-align:center;">
-      <strong>📱 Buka chat bot untuk melihat file</strong>
-    </div>
-  </div>
-
-  <!-- ══ SUCCESS (Browser — arahkan ke bot) ══ -->
-  <div class="phase" id="phase-success-browser">
-    <span class="success-icon">🎉</span>
-    <div class="success-title">Timer Selesai!</div>
-    <p class="success-sub">
-      Langkah terakhir — buka Telegram untuk menerima file kamu.<br>
-      Bot akan langsung mengirim file begitu kamu membuka chat.
-    </p>
-    <button class="btn btn-tg" id="btn-open-tg" style="margin-top:4px;">
-      ✈️ Buka Telegram &amp; Terima File
-    </button>
-    <button class="btn btn-blue" id="btn-retry-tg" style="opacity:0.7;">
-      🔄 Ulangi
-    </button>
-    <p class="note">Tap tombol di atas untuk membuka Telegram</p>
-  </div>
-
+  <!-- Tombol fallback jika tidak auto-redirect -->
+  <a class="btn" id="btn-tg" href="#" target="_blank">
+    ✈️ Buka Telegram Manual
+  </a>
+  <p class="note" id="note">Jika tidak otomatis terbuka, tap tombol di atas</p>
+  <div class="err" id="err-box"></div>
 </div>
 
 <script>
-// ════════════════════════════════════════════════════════════
-//  UNIFIED WEBAPP
-//  ▸ Telegram WebApp : iklan → timer → claim API → selesai
-//  ▸ Browser biasa   : iklan → timer → redirect ke bot
-// ════════════════════════════════════════════════════════════
+  // ── Konfigurasi ──────────────────────────────────────────
+  const BOT_USERNAME = "ujicoba1111_bot"; // ganti sesuai bot kamu
+  // ─────────────────────────────────────────────────────────
 
-// ── CONFIG — sesuaikan ──────────────────────────────────────
-const FALLBACK_BACKEND = "https://bot-ujicoba-production.up.railway.app";
-const BOT_USERNAME     = "ujicoba1111_bot"; // tanpa @
-// ────────────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const code   = params.get('code') || '';
 
-const params      = new URLSearchParams(location.search);
-const code        = params.get('code')    || '';
-const waitSeconds = parseInt(params.get('wait'))  || 20;
-const adUrl       = decodeURIComponent(params.get('ad')      || '');
-const backendUrl  = decodeURIComponent(params.get('backend') || '') || FALLBACK_BACKEND;
-
-// Deteksi Telegram WebApp
-const tg            = window.Telegram?.WebApp;
-const isTgApp       = !!(tg && tg.initData && tg.initData.length > 0);
-const userIdFromUrl = parseInt(params.get('uid')) || null;
-const userIdFromSdk = isTgApp ? (tg?.initDataUnsafe?.user?.id || null) : null;
-const userId        = userIdFromUrl || userIdFromSdk || null;
-
-// Deep link ke bot (browser mode)
-const botLink = `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`;
-
-// State mesin
-const STATE = { IDLE: 0, AD_OPENED: 1, TIMER_DONE: 2 };
-let state     = STATE.IDLE;
-let timerIv   = null;
-const CIRC    = 2 * Math.PI * 60; // r=60 → ≈377
-
-console.log('[WEBAPP] mode:', isTgApp ? 'TgApp' : 'Browser', '| uid:', userId, '| code:', code);
-
-// ── Helpers ──────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-
-function showPhase(id) {
-  document.querySelectorAll('.phase').forEach(e => e.classList.remove('active'));
-  $(id).classList.add('active');
-}
-
-function showError(msg) {
-  $('err-msg').textContent = msg;
-  showPhase('phase-error');
-}
-
-function setMainErr(msg) {
-  const b = $('main-err');
-  b.textContent   = msg;
-  b.style.display = msg ? 'block' : 'none';
-}
-
-function setStep(n) {
-  // Mark step 1..n-1 sebagai done, step n sebagai active
-  for (let i = 1; i <= 3; i++) {
-    const el = $(`step${i}`);
-    el.classList.remove('done', 'active');
-    if (i < n)  el.classList.add('done');
-    if (i === n) el.classList.add('active');
-  }
-}
-
-function updateRing(left, total) {
-  $('ring-fill').style.strokeDashoffset = CIRC * (left / total);
-}
-
-// ── Buka iklan ───────────────────────────────────────────────
-function openAd() {
-  if (!adUrl) return;
-  try {
-    if (isTgApp && tg?.openLink) tg.openLink(adUrl);
-    else window.open(adUrl, '_blank');
-  } catch(e) { /* ignore */ }
-}
-
-// ── Timer ────────────────────────────────────────────────────
-function startCountdown(onDone) {
-  let left = waitSeconds;
-
-  $('timer-num').textContent = left;
-  $('timer-lbl').textContent = 'Iklan sedang berjalan...';
-  updateRing(left, waitSeconds);
-
-  timerIv = setInterval(() => {
-    left--;
-    $('timer-num').textContent = left;
-    updateRing(left, waitSeconds);
-
-    if (left <= 0) {
-      clearInterval(timerIv);
-      $('timer-num').textContent   = '✓';
-      $('timer-lbl').textContent   = 'Selesai!';
-      $('timer-lbl').style.color   = 'var(--green)';
-      $('ring-fill').style.stroke           = 'var(--green)';
-      $('ring-fill').style.strokeDashoffset = '0';
-      state = STATE.TIMER_DONE;
-      if (onDone) onDone();
-    }
-  }, 1000);
-}
-
-// ── STATE MACHINE tombol utama ───────────────────────────────
-// Tombol satu — teksnya berubah sesuai state
-function handleMainBtn() {
-  if (state === STATE.IDLE) {
-    // Klik pertama: buka iklan, mulai timer
-    state = STATE.AD_OPENED;
-    setStep(2);
-
-    openAd();
-
-    // Tampilkan timer
-    $('timer-wrap').style.display = 'block';
-    $('btn-main').disabled  = true;
-    $('btn-main').innerHTML = '<div class="spinner"></div> Timer berjalan...';
-    $('main-note').textContent = '⏳ Kembali ke sini setelah melihat iklan';
-
-    startCountdown(() => {
-      // Timer selesai
-      setStep(3);
-      state = STATE.TIMER_DONE;
-
-      if (isTgApp || userId) {
-        // Telegram mode: tombol claim
-        $('btn-main').disabled  = false;
-        $('btn-main').className = 'btn btn-green btn-pulse';
-        $('btn-main').innerHTML = '🎁 Ambil File Sekarang';
-        $('main-note').textContent = '✅ Timer selesai! Klik tombol untuk mendapatkan file';
-      } else {
-        // Browser mode: tombol ke Telegram
-        $('btn-main').disabled  = false;
-        $('btn-main').className = 'btn btn-tg btn-pulse';
-        $('btn-main').innerHTML = '✈️ Buka Telegram &amp; Terima File';
-        $('main-note').textContent = '✅ Timer selesai! Buka Telegram untuk menerima file';
-      }
-    });
-
-  } else if (state === STATE.TIMER_DONE) {
-    if (isTgApp || userId) {
-      claimTelegram();
-    } else {
-      openBotTelegram();
-    }
-  }
-}
-
-// ── Claim via API (Telegram WebApp) ─────────────────────────
-async function claimTelegram() {
-  const btn = $('btn-main');
-  btn.disabled  = true;
-  btn.className = 'btn btn-green';
-  btn.innerHTML = '<div class="spinner"></div> Memproses...';
-  setMainErr('');
-  showPhase('phase-loading');
-  $('phase-loading').querySelector('h1').textContent = 'Mengirim File...';
-  $('phase-loading').querySelector('.sub').textContent = 'Bot sedang mengirimkan file ke chat kamu';
-
-  try {
-    const res  = await fetch(`${backendUrl}/claim`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ code, user_id: userId }),
-    });
-    const data = await res.json();
-
-    if (data.ok) {
-      showPhase('phase-success-tg');
-      setTimeout(() => tg?.close?.(), 4000);
-    } else {
-      // Kembalikan ke phase-main
-      showPhase('phase-main');
-      setMainErr(`❌ ${data.error || 'Gagal mengambil file. Coba lagi.'}`);
-      btn.disabled  = false;
-      btn.className = 'btn btn-green btn-pulse';
-      btn.innerHTML = '🎁 Ambil File Sekarang';
-    }
-  } catch(e) {
-    showPhase('phase-main');
-    setMainErr('❌ Gagal terhubung ke server. Periksa koneksi internet.');
-    btn.disabled  = false;
-    btn.className = 'btn btn-green btn-pulse';
-    btn.innerHTML = '🎁 Ambil File Sekarang';
-  }
-}
-
-// ── Redirect ke bot (Browser mode) ──────────────────────────
-function openBotTelegram() {
-  // Coba buka Telegram
-  window.open(botLink, '_blank');
-  // Tampilkan fase sukses browser sebagai konfirmasi
-  showPhase('phase-success-browser');
-}
-
-// ── Event listeners ──────────────────────────────────────────
-$('btn-main').addEventListener('click', handleMainBtn);
-
-$('btn-open-tg').addEventListener('click', () => {
-  window.open(botLink, '_blank');
-});
-
-$('btn-retry-tg').addEventListener('click', () => {
-  // Reset state untuk mencoba ulang
-  state = STATE.TIMER_DONE;
-  showPhase('phase-main');
-  $('btn-main').disabled  = false;
-  $('btn-main').className = 'btn btn-tg btn-pulse';
-  $('btn-main').innerHTML = '✈️ Buka Telegram &amp; Terima File';
-});
-
-// ── INIT ─────────────────────────────────────────────────────
-async function init() {
-  if (tg) { tg.ready(); tg.expand(); }
-
-  if (!code) {
-    showError('Parameter code tidak ditemukan di URL.');
-    return;
+  function showError(msg) {
+    const dots = document.querySelector('.dots');
+    dots.style.display = 'none';
+    const err = document.getElementById('err-box');
+    err.textContent = msg;
+    err.classList.add('show');
   }
 
-  // Validasi link ke backend
-  try {
-    const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
-    const data = await res.json();
+  function showFallback(url) {
+    const btn  = document.getElementById('btn-tg');
+    const note = document.getElementById('note');
+    btn.href = url;
+    btn.classList.add('show');
+    note.classList.add('show');
+  }
 
-    if (!data.ok) {
-      showError(data.expired
-        ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
-        : (data.error || 'Link tidak valid atau tidak ditemukan.'));
+  function redirect() {
+    if (!code) {
+      showError('❌ Parameter code tidak ditemukan. Pastikan link yang kamu buka sudah benar.');
       return;
     }
 
-    // Update info file
-    const n = data.fileCount || 1;
-    $('file-info').innerHTML =
-      `<strong>📦 ${n > 1 ? n + ' file' : '1 file'} siap diambil</strong><br>` +
-      `Ikuti ${isTgApp || userId ? '2' : '3'} langkah di bawah untuk mendapatkan file.`;
+    // Deep link Telegram
+    const tgLink = `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`;
 
-    // Sesuaikan step 3 untuk mode Telegram
-    if (isTgApp || userId) {
-      $('step3-text').innerHTML = 'Klik <strong>Ambil File</strong> — file langsung dikirim ke chat kamu';
-      // Sembunyikan step 3 panah ke Telegram karena tidak perlu redirect
-      $('main-title').textContent = 'Ambil File';
-    } else {
-      $('step3-text').innerHTML = 'Klik <strong>Buka Telegram</strong> — bot langsung kirim file ke chat kamu';
-    }
+    // Coba redirect otomatis
+    window.location.href = tgLink;
 
-    // Untuk Telegram WebApp, skip intro → langsung tampil (lebih clean)
-    if (isTgApp || userId) {
-      $('main-sub').textContent = 'Klik tombol untuk membuka iklan dan memulai timer';
-    }
-
-    showPhase('phase-main');
-
-  } catch(e) {
-    console.error('[WEBAPP] init error:', e);
-    showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
+    // Tampilkan tombol fallback setelah 3 detik
+    // (kalau redirect berhasil, user sudah pindah — tombol tidak terlihat)
+    setTimeout(() => showFallback(tgLink), 3000);
   }
-}
 
-init();
+  redirect();
 </script>
 </body>
 </html>
