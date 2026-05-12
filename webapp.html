@@ -13,6 +13,7 @@
       --border:  #1f2f4a;
       --blue:    #3b82f6;
       --green:   #22c55e;
+      --tg:      #229ED9;
       --text:    #f1f5f9;
       --muted:   #64748b;
       --subtle:  #94a3b8;
@@ -107,6 +108,33 @@
     }
     .info-box strong { color: var(--text); }
 
+    /* Steps */
+    .steps { margin-bottom: 24px; text-align: left; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 11px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--subtle);
+      line-height: 1.5;
+    }
+    .step-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .step strong { color: var(--text); }
+
+    /* Buttons */
     .btn {
       width: 100%;
       padding: 15px;
@@ -126,9 +154,11 @@
     }
     .btn:active:not(:disabled) { transform: scale(0.985); }
     .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-blue  { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 4px 18px rgba(59,130,246,0.3); }
     .btn-green { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 18px rgba(34,197,94,0.3); }
     .btn-tg    { background: linear-gradient(135deg, #229ED9, #1a7ab5); box-shadow: 0 4px 18px rgba(34,158,217,0.3); }
 
+    /* Error box */
     .error-box {
       background: #1a0505;
       border: 1px solid #7f1d1d;
@@ -142,6 +172,7 @@
       line-height: 1.5;
     }
 
+    /* Spinners */
     .spinner {
       display: inline-block;
       width: 18px; height: 18px;
@@ -161,16 +192,14 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Timer */
     .timer-wrap { margin-bottom: 22px; }
     .timer-ring {
       position: relative;
       width: 140px; height: 140px;
       margin: 0 auto 14px;
     }
-    .timer-ring svg {
-      position: absolute; inset: 0;
-      transform: rotate(-90deg);
-    }
+    .timer-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
     .timer-ring svg circle { fill: none; stroke-width: 6; }
     .timer-ring svg .track { stroke: var(--border); }
     .timer-ring svg .fill {
@@ -193,8 +222,7 @@
     }
     .timer-unit {
       font-size: 11px; color: var(--muted);
-      margin-top: 4px;
-      text-transform: uppercase; letter-spacing: 1px;
+      margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;
     }
     .timer-label { font-size: 13px; color: var(--muted); }
 
@@ -204,52 +232,26 @@
     }
     .btn-pulse { animation: pulse 1.2s ease-in-out infinite; }
 
+    /* Success */
     @keyframes popIn {
       0%   { transform: scale(0.4); opacity: 0; }
       70%  { transform: scale(1.15); }
       100% { transform: scale(1); opacity: 1; }
     }
     .success-icon {
-      font-size: 72px; display: block;
-      margin-bottom: 14px;
+      font-size: 72px; display: block; margin-bottom: 14px;
       animation: popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards;
     }
-    .success-title {
-      font-size: 24px; font-weight: 800;
-      color: var(--green); margin-bottom: 8px;
-    }
-    .success-sub {
-      font-size: 14px; color: var(--subtle); line-height: 1.6;
-    }
-    .note {
-      font-size: 11px; color: var(--muted);
-      margin-top: 14px; line-height: 1.5;
-    }
+    .success-title { font-size: 24px; font-weight: 800; color: var(--green); margin-bottom: 8px; }
+    .success-sub   { font-size: 14px; color: var(--subtle); line-height: 1.6; }
 
-    #tg-login-wrap {
-      display: flex;
-      justify-content: center;
-      margin: 4px 0 16px;
-      min-height: 50px;
-      align-items: center;
-    }
-
-    .divider {
-      display: flex; align-items: center; gap: 10px;
-      margin: 2px 0 14px;
-      color: var(--muted); font-size: 12px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1; height: 1px;
-      background: var(--border);
-    }
+    .note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
   </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- PHASE: LOADING -->
+  <!-- LOADING -->
   <div class="phase active" id="phase-loading">
     <span class="logo">📦</span>
     <h1>Memuat...</h1>
@@ -257,45 +259,49 @@
     <div class="spinner-lg"></div>
   </div>
 
-  <!-- PHASE: ERROR -->
+  <!-- ERROR -->
   <div class="phase" id="phase-error">
     <span class="logo">❌</span>
     <h1>Gagal</h1>
     <p class="subtitle" id="error-msg">Terjadi kesalahan.</p>
   </div>
 
-  <!-- PHASE: LOGIN (browser biasa, belum ada userId) -->
-  <div class="phase" id="phase-login">
-    <span class="logo">🔐</span>
-    <h1>Login dengan Telegram</h1>
-    <p class="subtitle">
-      Untuk mengambil file ini, login dengan akun Telegram kamu terlebih dahulu.
-    </p>
+  <!-- INTRO — tampil di browser biasa sebelum klik iklan -->
+  <div class="phase" id="phase-intro">
+    <span class="logo">📥</span>
+    <h1>Ambil File</h1>
+    <p class="subtitle">Ikuti 3 langkah mudah untuk mendapatkan file</p>
 
-    <div class="info-box">
-      <strong>📦 File siap diambil</strong><br>
-      Login sekali, lalu ikuti timer singkat untuk mendapatkan file langsung ke chat Telegram kamu.
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>Klik <strong>Buka Iklan</strong> — iklan terbuka di tab baru</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>Kembali ke halaman ini, tunggu <strong>timer selesai</strong></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>Klik <strong>Ambil File</strong> — kamu diarahkan ke bot Telegram</div>
+      </div>
     </div>
 
-    <div id="tg-login-wrap">
-      <div class="spinner-lg" style="margin:0;width:28px;height:28px;border-width:2px;"></div>
-    </div>
-
-    <div class="divider">atau buka via Telegram</div>
-
-    <button class="btn btn-tg" id="btn-open-tg">
-      ✈️ Buka Link di Telegram
+    <button class="btn btn-blue" id="btn-start-intro">
+      🚀 Buka Iklan & Mulai Timer
     </button>
 
-    <p class="note">Login aman via Telegram OAuth. Kami tidak menyimpan data sensitif.</p>
+    <p class="note">Iklan mendukung layanan file gratis ini. Terima kasih!</p>
   </div>
 
-  <!-- PHASE: TIMER -->
+  <!-- TIMER — dipakai oleh Telegram WebApp & browser (setelah klik iklan) -->
   <div class="phase" id="phase-timer">
-    <span class="tag">LANGKAH 1 DARI 2</span>
+    <span class="tag" id="timer-tag">LANGKAH 2 DARI 3</span>
     <span class="logo">⏳</span>
     <h1>Tunggu Sebentar</h1>
-    <p class="subtitle">Iklan sedang berjalan. Tunggu timer selesai<br>untuk mengaktifkan tombol ambil file.</p>
+    <p class="subtitle" id="timer-subtitle">
+      Iklan sedang berjalan. Tunggu timer selesai<br>untuk mengaktifkan tombol ambil file.
+    </p>
 
     <div class="timer-wrap">
       <div class="timer-ring">
@@ -308,7 +314,7 @@
           <div class="timer-unit">detik</div>
         </div>
       </div>
-      <div class="timer-label" id="timer-label">Membuka iklan...</div>
+      <div class="timer-label" id="timer-label">Iklan sedang berjalan...</div>
     </div>
 
     <div class="error-box" id="timer-error"></div>
@@ -317,10 +323,10 @@
       🔒 Tunggu Timer Selesai
     </button>
 
-    <p class="note">⚠️ Jangan tutup halaman ini sebelum mengambil file</p>
+    <p class="note" id="timer-note">⚠️ Jangan tutup halaman ini sebelum mengambil file</p>
   </div>
 
-  <!-- PHASE: CLAIMING -->
+  <!-- CLAIMING — hanya Telegram WebApp -->
   <div class="phase" id="phase-claiming">
     <span class="logo">📡</span>
     <h1>Mengirim File...</h1>
@@ -328,7 +334,7 @@
     <div class="spinner-lg"></div>
   </div>
 
-  <!-- PHASE: SUCCESS -->
+  <!-- SUCCESS Telegram WebApp -->
   <div class="phase" id="phase-success">
     <span class="success-icon">✅</span>
     <div class="success-title">File Terkirim!</div>
@@ -342,17 +348,32 @@
     </div>
   </div>
 
+  <!-- SUCCESS Browser — tombol ke bot -->
+  <div class="phase" id="phase-success-browser">
+    <span class="success-icon">🎉</span>
+    <div class="success-title">Siap Diambil!</div>
+    <p class="success-sub" style="margin-bottom:24px;">
+      Timer selesai! Klik tombol di bawah untuk membuka Telegram dan menerima file kamu.
+    </p>
+    <button class="btn btn-tg" id="btn-go-bot">
+      ✈️ Buka Telegram & Ambil File
+    </button>
+    <p class="note">File akan langsung dikirim bot begitu kamu membuka chat.</p>
+  </div>
+
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════════
-//  UNIFIED WEBAPP — bekerja di Telegram WebApp & browser
-// ══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+//  UNIFIED WEBAPP
+//  - Telegram WebApp : iklan → timer → claim via API → sukses
+//  - Browser biasa   : intro → iklan → timer → redirect ke bot
+// ════════════════════════════════════════════════════════════
 
-// ── CONFIG — sesuaikan dengan bot kamu ───────────────────
+// ── CONFIG ───────────────────────────────────────────────────
 const FALLBACK_BACKEND = "https://bot-ujicoba-production.up.railway.app";
-const BOT_USERNAME     = "ujicoba1111_bot";  // tanpa @
-// ─────────────────────────────────────────────────────────
+const BOT_USERNAME     = "ujicoba1111_bot"; // tanpa @
+// ─────────────────────────────────────────────────────────────
 
 const params      = new URLSearchParams(location.search);
 const code        = params.get('code')    || '';
@@ -360,18 +381,23 @@ const waitSeconds = parseInt(params.get('wait')) || 20;
 const adUrl       = decodeURIComponent(params.get('ad')      || '');
 const backendUrl  = decodeURIComponent(params.get('backend') || '') || FALLBACK_BACKEND;
 
+// Deteksi mode
 const tg            = window.Telegram?.WebApp;
 const isTgApp       = !!(tg && tg.initData && tg.initData.length > 0);
 const userIdFromUrl = parseInt(params.get('uid')) || null;
 const userIdFromSdk = isTgApp ? (tg?.initDataUnsafe?.user?.id || null) : null;
-let   userId        = userIdFromUrl || userIdFromSdk || null;
+const userId        = userIdFromUrl || userIdFromSdk || null;
+
+// Link deep ke bot (untuk redirect browser)
+const botDeepLink = `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`;
 
 let timerDone = false;
-const CIRC    = 2 * Math.PI * 65; // ~408
+const CIRC    = 2 * Math.PI * 65;
 
-console.log('[WEBAPP] isTgApp:', isTgApp, '| userId:', userId, '| code:', code);
+console.log('[WEBAPP] mode:', isTgApp ? 'TelegramApp' : 'Browser');
+console.log('[WEBAPP] userId:', userId, '| code:', code);
 
-// ── Helpers ───────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 function showPhase(id) {
   document.querySelectorAll('.phase').forEach(e => e.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -384,7 +410,7 @@ function showError(msg) {
 
 function setTimerError(msg) {
   const b = document.getElementById('timer-error');
-  b.textContent = msg;
+  b.textContent   = msg;
   b.style.display = msg ? 'block' : 'none';
 }
 
@@ -393,15 +419,27 @@ function updateRing(left, total) {
     CIRC * (left / total);
 }
 
-// ── Timer ─────────────────────────────────────────────────
-function startTimer() {
+// ── Buka iklan ────────────────────────────────────────────────
+function openAd() {
+  if (!adUrl) return;
+  try {
+    // Di Telegram WebApp gunakan openLink agar tidak keluar app
+    if (isTgApp && tg?.openLink) tg.openLink(adUrl);
+    else window.open(adUrl, '_blank');
+  } catch(e) { /* ignore */ }
+}
+
+// ── Timer ─────────────────────────────────────────────────────
+function startTimer(onDone) {
   const numEl   = document.getElementById('timer-num');
   const labelEl = document.getElementById('timer-label');
   const btn     = document.getElementById('btn-claim');
   let   left    = waitSeconds;
 
-  numEl.textContent = left;
+  numEl.textContent   = left;
   updateRing(left, waitSeconds);
+  labelEl.textContent = 'Iklan sedang berjalan...';
+  labelEl.style.color = '';
 
   const iv = setInterval(() => {
     left--;
@@ -413,7 +451,7 @@ function startTimer() {
       timerDone = true;
 
       numEl.textContent   = '✓';
-      labelEl.textContent = 'Timer selesai! Kamu bisa ambil file sekarang.';
+      labelEl.textContent = 'Timer selesai!';
       labelEl.style.color = 'var(--green)';
 
       const ring = document.getElementById('ring-fill');
@@ -421,44 +459,45 @@ function startTimer() {
       ring.style.strokeDashoffset = '0';
 
       btn.disabled  = false;
-      btn.innerHTML = '🎁 Ambil File Sekarang';
+      btn.innerHTML = isTgApp ? '🎁 Ambil File Sekarang' : '✈️ Ambil File via Telegram';
       btn.classList.add('btn-pulse');
+
+      if (onDone) onDone();
     }
   }, 1000);
 }
 
-// ── Buka iklan ────────────────────────────────────────────
-function openAd() {
-  if (!adUrl) return;
-  try {
-    if (tg?.openLink) tg.openLink(adUrl);
-    else window.open(adUrl, '_blank');
-  } catch(e) { /* ignore */ }
-}
-
-// ── Cek link & mulai timer ────────────────────────────────
-async function startProcess() {
+// ── MODE TELEGRAM WEBAPP ──────────────────────────────────────
+async function runTelegramMode() {
+  // Validasi link
   try {
     const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
     const data = await res.json();
-
     if (!data.ok) {
       showError(data.expired
         ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
         : (data.error || 'Link tidak valid.'));
       return;
     }
-
-    showPhase('phase-timer');
-    openAd();
-    startTimer();
-  } catch(err) {
+  } catch(e) {
     showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
+    return;
   }
+
+  // Sesuaikan teks fase timer untuk Telegram
+  document.getElementById('timer-tag').textContent      = 'LANGKAH 1 DARI 2';
+  document.getElementById('timer-subtitle').innerHTML   =
+    'Iklan sedang berjalan. Tunggu timer selesai<br>untuk mengaktifkan tombol ambil file.';
+  document.getElementById('timer-note').textContent     =
+    '⚠️ Jangan tutup halaman ini sebelum mengambil file';
+
+  showPhase('phase-timer');
+  openAd();
+  startTimer();
 }
 
-// ── Claim ─────────────────────────────────────────────────
-async function claimFile() {
+// Claim via API (Telegram WebApp saja)
+async function claimTelegram() {
   if (!timerDone) return;
 
   const btn = document.getElementById('btn-claim');
@@ -468,7 +507,7 @@ async function claimFile() {
   setTimerError('');
 
   if (!userId) {
-    setTimerError('❌ Sesi tidak ditemukan. Coba tutup dan buka ulang link dari awal.');
+    setTimerError('❌ Sesi tidak ditemukan. Coba buka ulang link dari bot.');
     btn.disabled  = false;
     btn.innerHTML = '🎁 Ambil File Sekarang';
     btn.classList.add('btn-pulse');
@@ -504,46 +543,68 @@ async function claimFile() {
   }
 }
 
-// ── Telegram Login Widget callback ────────────────────────
-// Dipanggil otomatis setelah user login di browser
-window.onTelegramAuth = function(user) {
-  userId = user.id;
-  console.log('[WEBAPP] OAuth login:', user.id, user.first_name);
+// ── MODE BROWSER ──────────────────────────────────────────────
+async function runBrowserMode() {
+  // Validasi link terlebih dahulu
+  try {
+    const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
+    const data = await res.json();
+    if (!data.ok) {
+      showError(data.expired
+        ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
+        : (data.error || 'Link tidak valid.'));
+      return;
+    }
+  } catch(e) {
+    showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
+    return;
+  }
 
-  // Buat session di backend karena masuk via browser (bukan /start bot)
-  fetch(`${backendUrl}/session`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ code, user_id: userId }),
-  })
-  .then(r => r.json())
-  .then(() => startProcess())
-  .catch(()  => startProcess()); // tetap lanjut meski session gagal
-};
-
-// ── Inject Telegram Login Widget ──────────────────────────
-function injectWidget() {
-  const wrap = document.getElementById('tg-login-wrap');
-  wrap.innerHTML = '';
-  const s = document.createElement('script');
-  s.async = true;
-  s.src   = 'https://telegram.org/js/telegram-widget.js?22';
-  s.setAttribute('data-telegram-login', BOT_USERNAME);
-  s.setAttribute('data-size',           'large');
-  s.setAttribute('data-radius',         '10');
-  s.setAttribute('data-onauth',         'onTelegramAuth(user)');
-  s.setAttribute('data-request-access', 'write');
-  wrap.appendChild(s);
+  // Tampilkan halaman intro dengan instruksi
+  showPhase('phase-intro');
 }
 
-// ── Tombol buka via Telegram ──────────────────────────────
-document.getElementById('btn-open-tg').addEventListener('click', () => {
-  window.open(`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`, '_blank');
+// Setelah klik iklan di browser — tampilkan timer
+function startBrowserTimer() {
+  // Sesuaikan teks
+  document.getElementById('timer-tag').textContent    = 'LANGKAH 2 DARI 3';
+  document.getElementById('timer-subtitle').innerHTML =
+    'Iklan terbuka di tab baru. Kembali ke sini dan tunggu timer selesai.';
+  document.getElementById('timer-note').textContent   =
+    '⚠️ Jangan tutup halaman ini sebelum timer selesai';
+
+  showPhase('phase-timer');
+
+  // Tombol claim di browser → redirect ke bot (bukan claim via API)
+  document.getElementById('btn-claim').onclick = redirectToBot;
+
+  startTimer();
+}
+
+// Redirect ke bot Telegram
+function redirectToBot() {
+  if (!timerDone) return;
+  showPhase('phase-success-browser');
+}
+
+// Tombol di phase-success-browser
+document.getElementById('btn-go-bot').addEventListener('click', () => {
+  window.open(botDeepLink, '_blank');
 });
 
-document.getElementById('btn-claim').addEventListener('click', claimFile);
+// ── Tombol intro: buka iklan & mulai timer ────────────────────
+document.getElementById('btn-start-intro').addEventListener('click', () => {
+  openAd();
+  startBrowserTimer();
+});
 
-// ── INIT ──────────────────────────────────────────────────
+// ── Tombol claim (Telegram mode, di-set ulang untuk browser) ──
+document.getElementById('btn-claim').addEventListener('click', () => {
+  if (isTgApp) claimTelegram();
+  else redirectToBot();
+});
+
+// ── INIT ──────────────────────────────────────────────────────
 async function init() {
   if (tg) { tg.ready(); tg.expand(); }
 
@@ -552,27 +613,12 @@ async function init() {
     return;
   }
 
-  if (userId) {
-    // Mode Telegram WebApp — langsung proses
-    await startProcess();
+  if (isTgApp || userId) {
+    // Mode Telegram WebApp
+    await runTelegramMode();
   } else {
-    // Mode browser — validasi link dulu, baru tampilkan login
-    try {
-      const res  = await fetch(`${backendUrl}/linkinfo?code=${encodeURIComponent(code)}`);
-      const data = await res.json();
-
-      if (!data.ok) {
-        showError(data.expired
-          ? 'Link sudah kadaluarsa. Minta link baru kepada pengirim.'
-          : (data.error || 'Link tidak valid.'));
-        return;
-      }
-
-      showPhase('phase-login');
-      injectWidget();
-    } catch(err) {
-      showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
-    }
+    // Mode browser biasa
+    await runBrowserMode();
   }
 }
 
