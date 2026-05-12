@@ -412,7 +412,6 @@
       if (data.ok) {
         // Sukses
         showPhase('phase-success');
-        setTimeout(() => tg?.close?.(), 3000);
       } else {
         // Gagal — kembali ke phase-main
         showPhase('phase-main');
@@ -432,6 +431,15 @@
 
   // ── Event listener ────────────────────────────────────
   $('btn-main').addEventListener('click', handleMainBtn);
+
+  $('btn-back-bot').addEventListener('click', () => {
+    if (tg?.close) {
+      tg.close(); // Tutup WebApp → kembali ke chat bot
+    } else {
+      // Fallback jika bukan Telegram WebApp
+      window.close();
+    }
+  });
 
   $('btn-back-bot').addEventListener('click', () => {
     if (tg?.close) {
