@@ -449,7 +449,7 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
       );
     }
 
-    const webAppUrl = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}`;
+    const webAppUrl = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&uid=${userId}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}`;
 
     console.log(`[START] User ${userId} → code: ${param}`);
     console.log(`[START] WebApp URL: ${webAppUrl}`);
