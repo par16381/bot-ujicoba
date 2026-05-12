@@ -380,7 +380,16 @@ const backendUrl  = decodeURIComponent(params.get('backend')   || '')    || FALL
 
 // ── Telegram WebApp SDK ────────────────────────────────────────────────────
 const tg     = window.Telegram?.WebApp;
-const userId = tg?.initDataUnsafe?.user?.id || null;
+const params = new URLSearchParams(location.search);
+
+  // Prioritas: URL param (dari bot) → SDK (fallback)
+const userIdFromUrl = parseInt(params.get('uid')) || null;
+const userIdFromSdk = tg?.initDataUnsafe?.user?.id || null;
+const userId        = userIdFromUrl || userIdFromSdk;
+
+console.log('[WEBAPP] userId from URL:', userIdFromUrl);
+console.log('[WEBAPP] userId from SDK:', userIdFromSdk);
+console.log('[WEBAPP] userId used:', userId);
 
 // ── State ──────────────────────────────────────────────────────────────────
 let timerInterval = null;
@@ -597,7 +606,7 @@ async function init() {
     showError('Gagal terhubung ke server. Periksa koneksi internet kamu.');
   }
 }
-alert('backendUrl: ' + backendUrl + '\ncode: ' + code + '\nuserId: ' + userId);
+
 init();
 </script>
 </body>
