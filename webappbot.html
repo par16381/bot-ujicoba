@@ -246,11 +246,11 @@
     <div class="success-title">File Terkirim!</div>
     <p class="success-sub">
       File sudah dikirim ke chat Telegram kamu.<br>
-      Silakan cek chat dengan bot.
+      Klik tombol di bawah untuk melihat file.
     </p>
-    <div class="info-box" style="text-align:center;">
-      <strong>📱 Buka chat bot untuk melihat file</strong>
-    </div>
+    <button class="btn btn-green btn-pulse" id="btn-back-bot">
+      📱 Kembali ke Bot
+    </button>
   </div>
 
 </div>
@@ -432,6 +432,12 @@
 
   // ── Event listener ────────────────────────────────────
   $('btn-main').addEventListener('click', handleMainBtn);
+
+  $('btn-back-bot').addEventListener('click', () => {
+    if (tg?.close) {
+      tg.close();
+    }
+  });
 
   // ── INIT ──────────────────────────────────────────────
   async function init() {
