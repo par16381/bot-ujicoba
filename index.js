@@ -180,15 +180,27 @@ if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
   console.warn("⚠️  PERINGATAN: WEBAPP_URL atau WEBAPP_BACKEND_URL belum diisi — fitur WebApp tidak akan berfungsi!");
 }
 
-const bot = new TelegramBot(BOT_TOKEN, {
-  polling: {
-    params: { timeout: 30, allowed_updates: [] },
-  },
-});
+// ─── BOT INIT dengan auto-retry saat 409 Conflict ─────────────────────────
+// Railway rolling deploy menyebabkan 2 container jalan bersamaan sementara.
+// Solusi: mulai polling: false dulu, lalu panggil startPolling() di initDB.
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
-bot.getUpdates({ offset: -1 }).then(() => {
-  console.log("🧹 Pending updates dibersihkan.");
-}).catch(() => {});
+let isPolling = false;
+
+async function startPolling() {
+  if (isPolling) return;
+  try {
+    // Bersihkan pending updates sebelum mulai
+    await bot.getUpdates({ offset: -1, limit: 1, timeout: 0 });
+    await bot.startPolling({ restart: false });
+    isPolling = true;
+    console.log("✅ Bot polling aktif.");
+  } catch (err) {
+    console.error("⚠️  Polling gagal, retry 5 detik lagi:", err.message);
+    isPolling = false;
+    setTimeout(startPolling, 5000);
+  }
+}
 
 // ─── IN-MEMORY STORE ───────────────────────────────────────────────────────
 const multiMode = new Map();
@@ -799,7 +811,19 @@ bot.on("message", async (msg) => {
 });
 
 bot.on("polling_error", (err) => {
-  console.error("Polling error:", err.message);
+  // 409 = instance lain masih jalan (Railway rolling deploy)
+  // Stop polling dan retry setelah 5 detik
+  if (err.message.includes("409")) {
+    console.warn("⚠️  409 Conflict — instance lain masih aktif, retry 5 detik lagi...");
+    isPolling = false;
+    bot.stopPolling().then(() => {
+      setTimeout(startPolling, 5000);
+    }).catch(() => {
+      setTimeout(startPolling, 5000);
+    });
+  } else {
+    console.error("Polling error:", err.message);
+  }
 });
 
 // ─── INIT ──────────────────────────────────────────────────────────────────
@@ -811,6 +835,8 @@ initDB()
       console.log(`🔗 Backend URL: ${WEBAPP_BACKEND_URL}`);
       console.log(`📱 WebApp URL: ${WEBAPP_URL}`);
     });
+    // Mulai polling setelah DB siap
+    startPolling();
   })
   .catch((err) => {
     console.error("❌ Gagal koneksi database:", err.message);
