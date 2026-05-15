@@ -156,7 +156,66 @@ async function initDB() {
     ON ad_sessions (code, user_id)
   `).catch(() => {});
 
+  // Tabel blacklist user
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS blocked_users (
+      user_id    BIGINT PRIMARY KEY,
+      reason     TEXT DEFAULT 'Tidak ada alasan',
+      banned_by  BIGINT NOT NULL,
+      banned_at  TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   console.log("✅ Database siap.");
+}
+
+// ─── BLACKLIST HELPERS ─────────────────────────────────────────────────────
+
+async function isBlacklisted(userId) {
+  const result = await pool.query(
+    "SELECT user_id FROM blocked_users WHERE user_id = $1",
+    [userId]
+  );
+  return result.rows.length > 0;
+}
+
+async function banUser(targetId, adminId, reason) {
+  // Admin tidak bisa di-ban
+  if (ADMIN_IDS.includes(targetId)) return "is_admin";
+
+  await pool.query(
+    `INSERT INTO blocked_users (user_id, reason, banned_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id) DO UPDATE
+       SET reason    = EXCLUDED.reason,
+           banned_by = EXCLUDED.banned_by,
+           banned_at = NOW()`,
+    [targetId, reason || "Tidak ada alasan", adminId]
+  );
+  return "banned";
+}
+
+async function unbanUser(targetId) {
+  const result = await pool.query(
+    "DELETE FROM blocked_users WHERE user_id = $1 RETURNING user_id",
+    [targetId]
+  );
+  return result.rows.length > 0 ? "unbanned" : "not_found";
+}
+
+async function getBanInfo(targetId) {
+  const result = await pool.query(
+    "SELECT reason, banned_by, banned_at FROM blocked_users WHERE user_id = $1",
+    [targetId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getBanList() {
+  const result = await pool.query(
+    "SELECT user_id, reason, banned_at FROM blocked_users ORDER BY banned_at DESC LIMIT 20"
+  );
+  return result.rows;
 }
 
 async function saveLink(data, ownerId) {
@@ -395,6 +454,12 @@ app.post("/claim", httpLimiter("claim", 20, 60), requireValidInitData, async (re
   // Jika tidak ada initData (fallback) → pakai user_id dari body
   const userId = req.verifiedUserId || parseInt(user_id);
 
+  // Cek blacklist sebelum proses apapun
+  if (await isBlacklisted(userId)) {
+    console.warn(`[CLAIM] Ditolak — user ${userId} ada di blacklist`);
+    return res.json({ ok: false, error: "Akun kamu telah diblokir dari bot ini." });
+  }
+
   try {
     // Ambil session terbaru yang belum verified dan belum expired
     const sessionResult = await pool.query(
@@ -526,6 +591,11 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const param  = match[1];
 
+  // Cek blacklist — admin tidak pernah diblokir
+  if (!ADMIN_IDS.includes(userId) && await isBlacklisted(userId)) {
+    return bot.sendMessage(chatId, "⛔ Akun kamu telah diblokir dari bot ini.");
+  }
+
   if (param) {
     const linkData = await getLink(param);
 
@@ -596,6 +666,16 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
 
 // ─── /help ─────────────────────────────────────────────────────────────────
 bot.onText(/\/help/, async (msg) => {
+  const isAdmin = ADMIN_IDS.includes(msg.from.id);
+
+  const adminSection = isAdmin
+    ? `\n*Perintah Admin:*\n` +
+      `• /ban \\[id\\] \\[alasan\\] — Blokir user\n` +
+      `• /unban \\[id\\] — Buka blokir user\n` +
+      `• /banlist — Daftar user diblokir\n` +
+      `• /checkban \\[id\\] — Cek status ban user\n`
+    : "";
+
   await bot.sendMessage(
     msg.chat.id,
     `📖 *Bantuan - File Share Bot*\n\n` +
@@ -609,7 +689,8 @@ bot.onText(/\/help/, async (msg) => {
     `• /help — Bantuan ini\n\n` +
     `*Perintah Kelola Link:*\n` +
     `• /delete \\[code\\] — Hapus link\n` +
-    `  _Contoh: /delete AbCd1234_\n\n` +
+    `  _Contoh: /delete AbCd1234_` +
+    adminSection + `\n\n` +
     `*Cara buat link:*\n` +
     `1\\. Kirim file langsung → link otomatis\n` +
     `2\\. /multi → kirim beberapa file → /done`,
@@ -712,6 +793,171 @@ bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
   await bot.sendMessage(chatId, messages[result] || "❌ Terjadi kesalahan.", {
     parse_mode: "Markdown",
   });
+});
+
+// ─── /ban ──────────────────────────────────────────────────────────────────
+// Hanya admin. Format: /ban [user_id] [alasan opsional]
+bot.onText(/\/ban(?:\s+(\d+))?(?:\s+(.+))?/, async (msg, match) => {
+  const chatId   = msg.chat.id;
+  const adminId  = msg.from.id;
+  const targetId = match[1] ? parseInt(match[1]) : null;
+  const reason   = match[2] || "Tidak ada alasan";
+
+  if (!ADMIN_IDS.includes(adminId)) {
+    return bot.sendMessage(chatId, "⛔ Perintah ini hanya untuk admin.");
+  }
+
+  if (!targetId) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan User ID yang ingin diblokir.\n\n_Contoh:_ /ban 123456789 spam",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  if (targetId === adminId) {
+    return bot.sendMessage(chatId, "⚠️ Kamu tidak bisa memblokir diri sendiri.");
+  }
+
+  const result = await banUser(targetId, adminId, reason);
+
+  if (result === "is_admin") {
+    return bot.sendMessage(chatId, "⛔ Admin tidak bisa diblokir.");
+  }
+
+  console.log(`[BAN] User ${targetId} diblokir oleh admin ${adminId} — alasan: ${reason}`);
+
+  await bot.sendMessage(
+    chatId,
+    `🚫 *User Diblokir*\n\n` +
+    `🆔 User ID: \`${targetId}\`\n` +
+    `📝 Alasan: ${reason}\n` +
+    `👮 Oleh: \`${adminId}\``,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /unban ────────────────────────────────────────────────────────────────
+// Hanya admin. Format: /unban [user_id]
+bot.onText(/\/unban(?:\s+(\d+))?/, async (msg, match) => {
+  const chatId   = msg.chat.id;
+  const adminId  = msg.from.id;
+  const targetId = match[1] ? parseInt(match[1]) : null;
+
+  if (!ADMIN_IDS.includes(adminId)) {
+    return bot.sendMessage(chatId, "⛔ Perintah ini hanya untuk admin.");
+  }
+
+  if (!targetId) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan User ID yang ingin dibuka blokirnya.\n\n_Contoh:_ /unban 123456789",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const result = await unbanUser(targetId);
+
+  if (result === "not_found") {
+    return bot.sendMessage(
+      chatId,
+      `ℹ️ User \`${targetId}\` tidak ada di daftar blokir.`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  console.log(`[UNBAN] User ${targetId} dibuka blokirnya oleh admin ${adminId}`);
+
+  await bot.sendMessage(
+    chatId,
+    `✅ *User Dibuka Blokirnya*\n\n` +
+    `🆔 User ID: \`${targetId}\`\n` +
+    `👮 Oleh: \`${adminId}\``,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /banlist ──────────────────────────────────────────────────────────────
+// Hanya admin. Tampilkan 20 user yang diblokir terbaru.
+bot.onText(/\/banlist/, async (msg) => {
+  const chatId  = msg.chat.id;
+  const adminId = msg.from.id;
+
+  if (!ADMIN_IDS.includes(adminId)) {
+    return bot.sendMessage(chatId, "⛔ Perintah ini hanya untuk admin.");
+  }
+
+  try {
+    const list = await getBanList();
+
+    if (list.length === 0) {
+      return bot.sendMessage(chatId, "✅ Tidak ada user yang diblokir saat ini.");
+    }
+
+    let text = `🚫 *Daftar User Diblokir* (${list.length})\n`;
+    text += `━━━━━━━━━━━━━━━━\n`;
+
+    list.forEach((row, i) => {
+      const tgl = new Date(row.banned_at).toLocaleDateString("id-ID", {
+        day: "2-digit", month: "short", year: "numeric"
+      });
+      text += `*${i + 1}.* \`${row.user_id}\`\n`;
+      text += `   📝 ${row.reason}\n`;
+      text += `   📅 ${tgl}\n`;
+      if (i < list.length - 1) text += `\n`;
+    });
+
+    await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+
+  } catch (err) {
+    console.error("Banlist error:", err.message);
+    bot.sendMessage(chatId, "❌ Gagal mengambil daftar blokir.");
+  }
+});
+
+// ─── /checkban ─────────────────────────────────────────────────────────────
+// Hanya admin. Cek status ban satu user. Format: /checkban [user_id]
+bot.onText(/\/checkban(?:\s+(\d+))?/, async (msg, match) => {
+  const chatId   = msg.chat.id;
+  const adminId  = msg.from.id;
+  const targetId = match[1] ? parseInt(match[1]) : null;
+
+  if (!ADMIN_IDS.includes(adminId)) {
+    return bot.sendMessage(chatId, "⛔ Perintah ini hanya untuk admin.");
+  }
+
+  if (!targetId) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan User ID yang ingin dicek.\n\n_Contoh:_ /checkban 123456789",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const info = await getBanInfo(targetId);
+
+  if (!info) {
+    return bot.sendMessage(
+      chatId,
+      `✅ User \`${targetId}\` *tidak* ada di daftar blokir.`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const tgl = new Date(info.banned_at).toLocaleString("id-ID", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+
+  await bot.sendMessage(
+    chatId,
+    `🚫 *User Diblokir*\n\n` +
+    `🆔 User ID: \`${targetId}\`\n` +
+    `📝 Alasan: ${info.reason}\n` +
+    `👮 Diblokir oleh: \`${info.banned_by}\`\n` +
+    `📅 Sejak: ${tgl}`,
+    { parse_mode: "Markdown" }
+  );
 });
 
 // ─── /multi ────────────────────────────────────────────────────────────────
@@ -827,6 +1073,11 @@ bot.on("message", async (msg) => {
 
   if (!isAllowed(userId)) {
     return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk menggunakan bot ini.");
+  }
+
+  // Cek blacklist
+  if (!ADMIN_IDS.includes(userId) && await isBlacklisted(userId)) {
+    return bot.sendMessage(chatId, "⛔ Akun kamu telah diblokir dari bot ini.");
   }
 
   const mediaType = getMediaType(msg);
