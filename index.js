@@ -4,6 +4,107 @@ const { Pool } = require("pg");
 const express = require("express");
 const cors = require("cors");
 const { httpLimiter, checkBotLimit, formatTimeLeft } = require("./rateLimiter");
+const crypto = require("crypto");
+
+// ─── VALIDASI initData TELEGRAM WEBAPP ────────────────────────────────────
+// Dokumen resmi: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+//
+// Cara kerja:
+//  1. Frontend mengirim tg.initData (string query) ke backend
+//  2. Backend hitung HMAC-SHA256 menggunakan secret key turunan dari BOT_TOKEN
+//  3. Bandingkan hash yang dihitung dengan hash yang ada di initData
+//  4. Cek juga auth_date agar initData lama tidak bisa dipakai ulang
+//
+// Mengembalikan objek user jika valid, null jika tidak valid.
+
+function verifyTelegramInitData(initData) {
+  try {
+    if (!initData || typeof initData !== "string") return null;
+
+    const params     = new URLSearchParams(initData);
+    const hash       = params.get("hash");
+    const authDate   = parseInt(params.get("auth_date") || "0");
+
+    if (!hash || !authDate) return null;
+
+    // Tolak initData yang sudah lebih dari 1 jam (3600 detik)
+    const MAX_AGE_SECONDS = 3600;
+    const ageSecs         = Math.floor(Date.now() / 1000) - authDate;
+    if (ageSecs > MAX_AGE_SECONDS) {
+      console.warn(`[INITDATA] Kedaluarsa — usia: ${ageSecs}s`);
+      return null;
+    }
+
+    // Susun data-check-string: semua field kecuali hash, urut alfabet, pisah \n
+    params.delete("hash");
+    const dataCheckString = Array.from(params.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+
+    // Secret key = HMAC-SHA256("WebAppData", BOT_TOKEN)
+    const secretKey = crypto
+      .createHmac("sha256", "WebAppData")
+      .update(BOT_TOKEN)
+      .digest();
+
+    // Hash yang seharusnya
+    const expectedHash = crypto
+      .createHmac("sha256", secretKey)
+      .update(dataCheckString)
+      .digest("hex");
+
+    if (expectedHash !== hash) {
+      console.warn("[INITDATA] Hash tidak cocok — kemungkinan data dipalsukan");
+      return null;
+    }
+
+    // Parse field user
+    const userRaw = params.get("user");
+    if (!userRaw) return null;
+
+    const user = JSON.parse(userRaw);
+    return user; // { id, first_name, username, ... }
+
+  } catch (err) {
+    console.error("[INITDATA] Error validasi:", err.message);
+    return null;
+  }
+}
+
+// ─── MIDDLEWARE: wajib initData valid untuk endpoint sensitif ──────────────
+// Dipasang di /claim.
+// Jika initData valid → userId diambil dari sana (bukan dari body).
+// Jika initData tidak ada → fallback ke user_id dari body (kompatibilitas
+//   desktop / pengembangan). Jika ada tapi invalid → tolak langsung.
+
+function requireValidInitData(req, res, next) {
+  const initData = req.body?.init_data || req.body?.initData || "";
+
+  // Tidak ada initData → fallback (izinkan, tapi user_id dari body tetap dipakai)
+  if (!initData) {
+    console.warn(`[INITDATA] Tidak ada initData dari IP: ${
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress
+    } — fallback ke user_id body`);
+    return next();
+  }
+
+  // Ada initData → wajib valid
+  const user = verifyTelegramInitData(initData);
+  if (!user) {
+    return res.status(403).json({
+      ok:    false,
+      error: "Data autentikasi Telegram tidak valid atau kedaluarsa. Buka ulang WebApp dari bot.",
+    });
+  }
+
+  // Tempel user terverifikasi ke request agar handler bisa pakai
+  req.telegramUser   = user;
+  req.verifiedUserId = user.id;
+
+  console.log(`[INITDATA] Valid — user: ${user.id} (@${user.username || "-"})`);
+  next();
+}
 
 // ─── EXPRESS ───────────────────────────────────────────────────────────────
 const app = express();
@@ -282,14 +383,17 @@ app.get("/botinfo", (req, res) => {
 
 // ─── HTTP: /claim ──────────────────────────────────────────────────────────
 // [TITIK 1] Rate limit: max 5 request per menit per user
-app.post("/claim", httpLimiter("claim", 10, 60), async (req, res) => {
+// [VALIDASI] initData Telegram diverifikasi HMAC-SHA256 sebelum masuk handler
+app.post("/claim", httpLimiter("claim", 20, 60), requireValidInitData, async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
     return res.json({ ok: false, error: "Parameter tidak lengkap." });
   }
 
-  const userId = parseInt(user_id);
+  // Jika initData valid → pakai userId terverifikasi dari Telegram
+  // Jika tidak ada initData (fallback) → pakai user_id dari body
+  const userId = req.verifiedUserId || parseInt(user_id);
 
   try {
     // Ambil session terbaru yang belum verified dan belum expired
@@ -356,8 +460,8 @@ app.post("/claim", httpLimiter("claim", 10, 60), async (req, res) => {
 
 // ─── HTTP: /session ────────────────────────────────────────────────────────
 // Dipanggil oleh landing page sebelum redirect ke bot
-// [TITIK 2] Rate limit: max 10 request per menit per user
-app.post("/session", httpLimiter("session", 15, 60), async (req, res) => {
+// [TITIK 2] Rate limit: max 20 request per menit per user
+app.post("/session", httpLimiter("session", 20, 60), async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
@@ -580,7 +684,7 @@ bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
   const code   = match[1];
 
   // [TITIK 3] Rate limit: max 10 delete per menit per user
-  const deleteLimit = checkBotLimit("delete", userId, 20, 60);
+  const deleteLimit = checkBotLimit("delete", userId, 10, 60);
   if (!deleteLimit.ok) {
     return bot.sendMessage(
       chatId,
