@@ -3,6 +3,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const { Pool } = require("pg");
 const express = require("express");
 const cors = require("cors");
+const { httpLimiter, checkBotLimit, formatTimeLeft } = require("./rateLimiter");
 
 // ─── EXPRESS ───────────────────────────────────────────────────────────────
 const app = express();
@@ -280,7 +281,8 @@ app.get("/botinfo", (req, res) => {
 });
 
 // ─── HTTP: /claim ──────────────────────────────────────────────────────────
-app.post("/claim", async (req, res) => {
+// [TITIK 1] Rate limit: max 5 request per menit per user
+app.post("/claim", httpLimiter("claim", 10, 60), async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
@@ -354,7 +356,8 @@ app.post("/claim", async (req, res) => {
 
 // ─── HTTP: /session ────────────────────────────────────────────────────────
 // Dipanggil oleh landing page sebelum redirect ke bot
-app.post("/session", async (req, res) => {
+// [TITIK 2] Rate limit: max 10 request per menit per user
+app.post("/session", httpLimiter("session", 15, 60), async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
@@ -576,6 +579,16 @@ bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
   const userId = msg.from.id;
   const code   = match[1];
 
+  // [TITIK 3] Rate limit: max 10 delete per menit per user
+  const deleteLimit = checkBotLimit("delete", userId, 20, 60);
+  if (!deleteLimit.ok) {
+    return bot.sendMessage(
+      chatId,
+      `⏳ Terlalu banyak permintaan delete. Coba lagi dalam *${formatTimeLeft(deleteLimit.retryAfter)}*`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
   if (!code) {
     return bot.sendMessage(
       chatId,
@@ -604,6 +617,16 @@ bot.onText(/\/multi/, async (msg) => {
 
   if (!isAllowed(userId)) {
     return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk menggunakan bot ini.");
+  }
+
+  // [TITIK 4] Rate limit: max 5 sesi multi per jam per user
+  const multiLimit = checkBotLimit("multi", userId, 20, 60);
+  if (!multiLimit.ok) {
+    return bot.sendMessage(
+      chatId,
+      `⏳ *Terlalu banyak sesi multi file!*\n\nCoba lagi dalam *${formatTimeLeft(multiLimit.retryAfter)}*.\n\n_Maksimal 5 sesi per jam._`,
+      { parse_mode: "Markdown" }
+    );
   }
 
   multiMode.set(userId, { storedIds: [], mediaGroups: new Map() });
@@ -707,6 +730,16 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(
       chatId,
       "ℹ️ Kirimkan *file, foto, video, audio, atau dokumen*.",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  // [TITIK 5] Rate limit: max 20 upload per jam per user
+  const uploadLimit = checkBotLimit("upload", userId, 20, 60);
+  if (!uploadLimit.ok) {
+    return bot.sendMessage(
+      chatId,
+      `⏳ *Batas upload tercapai!*\n\nKamu bisa upload lagi dalam *${formatTimeLeft(uploadLimit.retryAfter)}*.\n\n_Maksimal 20 file per jam._`,
       { parse_mode: "Markdown" }
     );
   }
