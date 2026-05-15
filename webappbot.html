@@ -202,7 +202,7 @@
     <div class="steps">
       <div class="step active" id="step1">
         <div class="step-num">1</div>
-        <div>Klik <strong>Buka Iklan & Mulai</strong> — iklan terbuka di tab baru</div>
+        <div>Klik <strong>Buka Iklan &amp; Mulai</strong> — iklan terbuka di tab baru</div>
       </div>
       <div class="step" id="step2">
         <div class="step-num">2</div>
@@ -273,6 +273,11 @@
   const userId = tg?.initDataUnsafe?.user?.id
               || parseInt(params.get('uid'))
               || null;
+
+  // [VALIDASI] Ambil initData mentah dari Telegram SDK
+  // String ini yang akan dikirim ke backend untuk diverifikasi HMAC-SHA256
+  // Jika tidak ada (buka di browser biasa) → string kosong → backend fallback
+  const initData = tg?.initData || '';
 
   // ── State ─────────────────────────────────────────────
   const STATE = { IDLE: 0, AD_OPENED: 1, TIMER_DONE: 2 };
@@ -406,7 +411,13 @@
       const res  = await fetch(`${backendUrl}/claim`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ code, user_id: userId }),
+        body:    JSON.stringify({
+          code,
+          user_id:   userId,
+          // [VALIDASI] Kirim initData mentah ke backend untuk verifikasi HMAC
+          // Backend akan verifikasi signature & auth_date sebelum proses claim
+          init_data: initData,
+        }),
       });
       const data = await res.json();
 
