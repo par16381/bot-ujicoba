@@ -1153,9 +1153,11 @@ bot.onText(/\/linkdetail(?:\s+(\S+))?/, async (msg, match) => {
   const linkData = await getLink(code);
   const ids      = raw.type === "single" ? [raw.data.id] : raw.data.ids;
   const expired  = linkData?.expired ? "⛔ Sudah expired" : "✅ Aktif";
+  const title    = await getLinkTitle(code);
 
   let text = `🔍 *Detail Link* \`${code}\`\n`;
   text += `━━━━━━━━━━━━━━━━\n`;
+  if (title) text += `🏷️ Judul: *${title}*\n`;
   text += `📦 Tipe: ${raw.type === "single" ? "Single" : "Multi"}\n`;
   text += `📄 Jumlah file: *${ids.length}*\n`;
   text += `⬇️ Download: *${linkData?.download_count ?? 0}x*\n`;
@@ -1166,6 +1168,7 @@ bot.onText(/\/linkdetail(?:\s+(\S+))?/, async (msg, match) => {
     text += `  *${i + 1}.* Message ID \`${id}\`\n`;
   });
   text += `\n_Edit: /replace, /addfile, /removefile_`;
+  if (title) text += `\n_Ubah judul: /settitle ${code} Judul Baru_`;
 
   await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 });
