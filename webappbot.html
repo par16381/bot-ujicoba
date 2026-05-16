@@ -267,6 +267,7 @@
   const adUrl       = decodeURIComponent(params.get('ad')      || '');
   const backendUrl  = decodeURIComponent(params.get('backend') || '');
   const botUsername = params.get('bot') || '';
+  const linkTitle   = decodeURIComponent(params.get('title')   || '');
 
   // ── Telegram WebApp SDK ───────────────────────────────
   const tg     = window.Telegram?.WebApp;
@@ -486,7 +487,11 @@
 
       // Update info file
       const n = data.fileCount || 1;
+      const titleHtml = linkTitle
+        ? `<strong>🏷️ ${linkTitle}</strong><br>`
+        : "";
       $('file-info').innerHTML =
+        `${titleHtml}` +
         `<strong>📦 ${n > 1 ? n + ' file' : '1 file'} siap diambil</strong><br>` +
         `Ikuti 3 langkah di bawah untuk mendapatkan file ke chat Telegram kamu.`;
 
