@@ -218,6 +218,94 @@ async function getBanList() {
   return result.rows;
 }
 
+// ─── EDIT LINK HELPERS ─────────────────────────────────────────────────────
+
+// Cek apakah user boleh mengedit link (owner atau admin)
+async function canEditLink(code, userId) {
+  const result = await pool.query(
+    "SELECT owner_id FROM links WHERE code = $1",
+    [code]
+  );
+  if (result.rows.length === 0) return "not_found";
+  const isAdmin = ADMIN_IDS.includes(userId);
+  const isOwner = result.rows[0].owner_id === userId;
+  if (!isAdmin && !isOwner) return "forbidden";
+  return "ok";
+}
+
+// Ambil data link mentah (tanpa cek expiry) untuk keperluan edit
+async function getRawLink(code) {
+  const result = await pool.query(
+    "SELECT data, type, owner_id FROM links WHERE code = $1",
+    [code]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+}
+
+// Ganti semua isi link dengan file baru (apapun tipenya → single)
+async function replaceLinkFiles(code, newStoredId) {
+  const newData = { type: "single", id: newStoredId };
+  await pool.query(
+    "UPDATE links SET type = $1, data = $2 WHERE code = $3",
+    ["single", JSON.stringify(newData), code]
+  );
+}
+
+// Tambah file ke link — jika single jadi multi, jika multi append
+async function addFileToLink(code, newStoredId) {
+  const raw = await getRawLink(code);
+  if (!raw) return "not_found";
+
+  let ids = [];
+  if (raw.type === "single") {
+    ids = [raw.data.id, newStoredId];
+  } else {
+    ids = [...raw.data.ids, newStoredId];
+  }
+
+  const newData = { type: "multi", ids };
+  await pool.query(
+    "UPDATE links SET type = $1, data = $2 WHERE code = $3",
+    ["multi", JSON.stringify(newData), code]
+  );
+  return ids.length;
+}
+
+// Hapus file tertentu dari link berdasarkan nomor urut (1-based)
+async function removeFileFromLink(code, index) {
+  const raw = await getRawLink(code);
+  if (!raw) return { status: "not_found" };
+
+  let ids = raw.type === "single" ? [raw.data.id] : [...raw.data.ids];
+
+  if (index < 1 || index > ids.length) {
+    return { status: "out_of_range", total: ids.length };
+  }
+
+  ids.splice(index - 1, 1);
+
+  if (ids.length === 0) {
+    return { status: "empty" };
+  }
+
+  let newType, newData;
+  if (ids.length === 1) {
+    newType = "single";
+    newData = { type: "single", id: ids[0] };
+  } else {
+    newType = "multi";
+    newData = { type: "multi", ids };
+  }
+
+  await pool.query(
+    "UPDATE links SET type = $1, data = $2 WHERE code = $3",
+    [newType, JSON.stringify(newData), code]
+  );
+
+  return { status: "ok", remaining: ids.length };
+}
+
 async function saveLink(data, ownerId) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let code;
@@ -365,6 +453,9 @@ async function startPolling() {
 
 // ─── IN-MEMORY STORE ───────────────────────────────────────────────────────
 const multiMode = new Map();
+// editMode menyimpan state sementara saat user sedang dalam sesi edit
+// Map<userId, { action: "replace"|"add", code: string }>
+const editMode = new Map();
 
 // ─── HELPER ────────────────────────────────────────────────────────────────
 function isAllowed(userId) {
@@ -443,7 +534,7 @@ app.get("/botinfo", (req, res) => {
 // ─── HTTP: /claim ──────────────────────────────────────────────────────────
 // [TITIK 1] Rate limit: max 5 request per menit per user
 // [VALIDASI] initData Telegram diverifikasi HMAC-SHA256 sebelum masuk handler
-app.post("/claim", httpLimiter("claim", 20, 60), requireValidInitData, async (req, res) => {
+app.post("/claim", httpLimiter("claim", 5, 60), requireValidInitData, async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
@@ -525,8 +616,8 @@ app.post("/claim", httpLimiter("claim", 20, 60), requireValidInitData, async (re
 
 // ─── HTTP: /session ────────────────────────────────────────────────────────
 // Dipanggil oleh landing page sebelum redirect ke bot
-// [TITIK 2] Rate limit: max 20 request per menit per user
-app.post("/session", httpLimiter("session", 20, 60), async (req, res) => {
+// [TITIK 2] Rate limit: max 10 request per menit per user
+app.post("/session", httpLimiter("session", 10, 60), async (req, res) => {
   const { code, user_id } = req.body;
 
   if (!code || !user_id) {
@@ -666,7 +757,17 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
 
 // ─── /help ─────────────────────────────────────────────────────────────────
 bot.onText(/\/help/, async (msg) => {
-  const isAdmin = ADMIN_IDS.includes(msg.from.id);
+  const isAdmin        = ADMIN_IDS.includes(msg.from.id);
+  const canEdit        = isAllowedToEdit(msg.from.id);
+
+  const editSection = canEdit
+    ? `\n*Perintah Edit Link:*\n` +
+      `• /replace \\[code\\] — Ganti semua file dalam link\n` +
+      `• /addfile \\[code\\] — Tambah file ke link\n` +
+      `• /removefile \\[code\\] \\[no\\] — Hapus file ke\\-N dari link\n` +
+      `• /linkdetail \\[code\\] — Detail isi link\n` +
+      `• /canceledit — Batalkan sesi edit\n`
+    : "";
 
   const adminSection = isAdmin
     ? `\n*Perintah Admin:*\n` +
@@ -690,6 +791,7 @@ bot.onText(/\/help/, async (msg) => {
     `*Perintah Kelola Link:*\n` +
     `• /delete \\[code\\] — Hapus link\n` +
     `  _Contoh: /delete AbCd1234_` +
+    editSection +
     adminSection + `\n\n` +
     `*Cara buat link:*\n` +
     `1\\. Kirim file langsung → link otomatis\n` +
@@ -793,6 +895,213 @@ bot.onText(/\/delete(?:\s+(\S+))?/, async (msg, match) => {
   await bot.sendMessage(chatId, messages[result] || "❌ Terjadi kesalahan.", {
     parse_mode: "Markdown",
   });
+});
+
+// ─── HELPER: cek akses edit (admin atau whitelist) ─────────────────────────
+function isAllowedToEdit(userId) {
+  return ADMIN_IDS.includes(userId) || WHITELIST_USERS.includes(userId);
+}
+
+// ─── /replace [code] ───────────────────────────────────────────────────────
+// Ganti semua file dalam link. Setelah command, user kirim file baru.
+bot.onText(/\/replace(?:\s+(\S+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const code   = match[1];
+
+  if (!isAllowedToEdit(userId)) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk fitur ini.");
+  }
+
+  if (!code) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan kode link.\n\n_Contoh:_ /replace AbCd1234",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const access = await canEditLink(code, userId);
+  if (access === "not_found") return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  if (access === "forbidden")  return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengedit link ini.");
+
+  // Simpan state edit
+  editMode.set(userId, { action: "replace", code });
+
+  await bot.sendMessage(
+    chatId,
+    `🔄 *Mode Ganti File*\n\n` +
+    `Link: \`${code}\`\n\n` +
+    `Kirimkan *1 file baru* sekarang.\n` +
+    `Semua file lama dalam link ini akan diganti.\n\n` +
+    `Ketik /canceledit untuk membatalkan.`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /addfile [code] ───────────────────────────────────────────────────────
+// Tambah file ke link yang sudah ada.
+bot.onText(/\/addfile(?:\s+(\S+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const code   = match[1];
+
+  if (!isAllowedToEdit(userId)) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk fitur ini.");
+  }
+
+  if (!code) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan kode link.\n\n_Contoh:_ /addfile AbCd1234",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const access = await canEditLink(code, userId);
+  if (access === "not_found") return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  if (access === "forbidden")  return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengedit link ini.");
+
+  // Tampilkan isi link saat ini
+  const raw = await getRawLink(code);
+  const currentCount = raw.type === "single" ? 1 : raw.data.ids.length;
+
+  editMode.set(userId, { action: "add", code });
+
+  await bot.sendMessage(
+    chatId,
+    `➕ *Mode Tambah File*\n\n` +
+    `Link: \`${code}\`\n` +
+    `File saat ini: *${currentCount} file*\n\n` +
+    `Kirimkan file yang ingin ditambahkan.\n` +
+    `Kirim satu per satu, ketik /canceledit jika selesai atau batal.`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /removefile [code] [nomor] ────────────────────────────────────────────
+// Hapus file ke-N dari link multi. Tampilkan daftar file jika nomor tidak disertakan.
+bot.onText(/\/removefile(?:\s+(\S+))?(?:\s+(\d+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const code   = match[1];
+  const index  = match[2] ? parseInt(match[2]) : null;
+
+  if (!isAllowedToEdit(userId)) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk fitur ini.");
+  }
+
+  if (!code) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan kode link dan nomor file.\n\n_Contoh:_ /removefile AbCd1234 2",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const access = await canEditLink(code, userId);
+  if (access === "not_found") return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  if (access === "forbidden")  return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengedit link ini.");
+
+  const raw = await getRawLink(code);
+  const ids  = raw.type === "single" ? [raw.data.id] : raw.data.ids;
+
+  // Jika nomor tidak disertakan → tampilkan daftar file
+  if (!index) {
+    let text = `📋 *Daftar File di Link* \`${code}\`\n`;
+    text += `━━━━━━━━━━━━━━━━\n`;
+    ids.forEach((id, i) => {
+      text += `*${i + 1}.* Message ID: \`${id}\`\n`;
+    });
+    text += `\nGunakan: /removefile ${code} [nomor]`;
+    return bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+  }
+
+  // Proses hapus
+  const result = await removeFileFromLink(code, index);
+
+  if (result.status === "not_found") {
+    return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  }
+  if (result.status === "out_of_range") {
+    return bot.sendMessage(
+      chatId,
+      `⚠️ Nomor tidak valid. Link ini hanya punya *${result.total} file*.\n\nGunakan: /removefile ${code} [1-${result.total}]`,
+      { parse_mode: "Markdown" }
+    );
+  }
+  if (result.status === "empty") {
+    return bot.sendMessage(
+      chatId,
+      `⚠️ Tidak bisa menghapus — link akan jadi kosong.\nGunakan /delete ${code} jika ingin menghapus link sepenuhnya.`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  console.log(`[REMOVEFILE] File ke-${index} dari link ${code} dihapus oleh user ${userId}`);
+
+  await bot.sendMessage(
+    chatId,
+    `✅ *File ke-${index} berhasil dihapus!*\n\n` +
+    `Link: \`${code}\`\n` +
+    `File tersisa: *${result.remaining} file*`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /canceledit ───────────────────────────────────────────────────────────
+bot.onText(/\/canceledit/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  if (!editMode.has(userId)) {
+    return bot.sendMessage(chatId, "⚠️ Tidak ada sesi edit yang aktif.");
+  }
+
+  editMode.delete(userId);
+  await bot.sendMessage(chatId, "❌ Sesi edit dibatalkan.");
+});
+
+// ─── /linkinfo [code] (bot command) ────────────────────────────────────────
+// Tampilkan detail isi link: jumlah file, tipe, expiry, download count.
+bot.onText(/\/linkdetail(?:\s+(\S+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const code   = match[1];
+
+  if (!isAllowedToEdit(userId)) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk fitur ini.");
+  }
+
+  if (!code) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Sertakan kode link.\n\n_Contoh:_ /linkdetail AbCd1234",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  const raw = await getRawLink(code);
+  if (!raw) return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+
+  const linkData = await getLink(code);
+  const ids      = raw.type === "single" ? [raw.data.id] : raw.data.ids;
+  const expired  = linkData?.expired ? "⛔ Sudah expired" : "✅ Aktif";
+
+  let text = `🔍 *Detail Link* \`${code}\`\n`;
+  text += `━━━━━━━━━━━━━━━━\n`;
+  text += `📦 Tipe: ${raw.type === "single" ? "Single" : "Multi"}\n`;
+  text += `📄 Jumlah file: *${ids.length}*\n`;
+  text += `⬇️ Download: *${linkData?.download_count ?? 0}x*\n`;
+  text += `🔴 Status: ${expired}\n`;
+  text += `⏳ Expired: ${formatExpiry(linkData?.expires_at ?? null)}\n\n`;
+  text += `*Daftar File:*\n`;
+  ids.forEach((id, i) => {
+    text += `  *${i + 1}.* Message ID \`${id}\`\n`;
+  });
+  text += `\n_Edit: /replace, /addfile, /removefile_`;
+
+  await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 });
 
 // ─── /ban ──────────────────────────────────────────────────────────────────
@@ -970,7 +1279,7 @@ bot.onText(/\/multi/, async (msg) => {
   }
 
   // [TITIK 4] Rate limit: max 5 sesi multi per jam per user
-  const multiLimit = checkBotLimit("multi", userId, 20, 60);
+  const multiLimit = checkBotLimit("multi", userId, 5, 3600);
   if (!multiLimit.ok) {
     return bot.sendMessage(
       chatId,
@@ -1090,7 +1399,7 @@ bot.on("message", async (msg) => {
   }
 
   // [TITIK 5] Rate limit: max 20 upload per jam per user
-  const uploadLimit = checkBotLimit("upload", userId, 20, 60);
+  const uploadLimit = checkBotLimit("upload", userId, 20, 3600);
   if (!uploadLimit.ok) {
     return bot.sendMessage(
       chatId,
@@ -1104,6 +1413,68 @@ bot.on("message", async (msg) => {
     audio: "🎵", voice: "🎤", video_note: "📹", animation: "🎞",
   };
   const emoji = mediaEmoji[mediaType] || "📁";
+
+  // ── MODE EDIT LINK ───────────────────────────────────────────────────────
+  if (editMode.has(userId)) {
+    const session = editMode.get(userId);
+
+    // ── REPLACE: ganti semua file, selesai otomatis setelah 1 file ──────────
+    if (session.action === "replace") {
+      editMode.delete(userId);
+      const processingMsg = await bot.sendMessage(chatId, "⏳ Mengganti file...");
+      try {
+        const storedId = await forwardToStorage(chatId, msg.message_id);
+        await replaceLinkFiles(session.code, storedId);
+        const shareLink = makeShareLink(session.code);
+        await bot.deleteMessage(chatId, processingMsg.message_id);
+        await bot.sendMessage(
+          chatId,
+          `✅ *File berhasil diganti!*\n\n` +
+          `🔑 Link: \`${session.code}\`\n` +
+          `🔗 ${shareLink}\n\n` +
+          `_Semua file lama telah diganti dengan file baru._`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[{ text: "📤 Bagikan Link", url: shareLink }]],
+            },
+          }
+        );
+        console.log(`[REPLACE] Link ${session.code} diganti oleh user ${userId}`);
+      } catch (err) {
+        console.error("Error replace file:", err.message);
+        await bot.editMessageText("❌ Gagal mengganti file.", {
+          chat_id: chatId, message_id: processingMsg.message_id,
+        });
+      }
+      return;
+    }
+
+    // ── ADD: tambah file, mode tetap aktif sampai /canceledit ───────────────
+    if (session.action === "add") {
+      const processingMsg = await bot.sendMessage(chatId, "⏳ Menambahkan file...");
+      try {
+        const storedId    = await forwardToStorage(chatId, msg.message_id);
+        const totalFiles  = await addFileToLink(session.code, storedId);
+        await bot.deleteMessage(chatId, processingMsg.message_id);
+        await bot.sendMessage(
+          chatId,
+          `${emoji} *File ditambahkan!*\n\n` +
+          `🔑 Link: \`${session.code}\`\n` +
+          `📦 Total file sekarang: *${totalFiles}*\n\n` +
+          `_Kirim file lagi untuk menambah, atau /canceledit jika selesai._`,
+          { parse_mode: "Markdown" }
+        );
+        console.log(`[ADDFILE] File ditambahkan ke link ${session.code} oleh user ${userId}, total: ${totalFiles}`);
+      } catch (err) {
+        console.error("Error add file:", err.message);
+        await bot.editMessageText("❌ Gagal menambahkan file.", {
+          chat_id: chatId, message_id: processingMsg.message_id,
+        });
+      }
+      return;
+    }
+  }
 
   // ── MODE MULTI FILE ──────────────────────────────────────────────────────
   if (multiMode.has(userId)) {
