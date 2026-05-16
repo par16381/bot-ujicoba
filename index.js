@@ -138,6 +138,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE links ADD COLUMN IF NOT EXISTS owner_id BIGINT`).catch(() => {});
   await pool.query(`ALTER TABLE links ADD COLUMN IF NOT EXISTS download_count INT DEFAULT 0`).catch(() => {});
   await pool.query(`ALTER TABLE links ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP DEFAULT NULL`).catch(() => {});
+  await pool.query(`ALTER TABLE links ADD COLUMN IF NOT EXISTS title TEXT DEFAULT NULL`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ad_sessions (
@@ -216,6 +217,24 @@ async function getBanList() {
     "SELECT user_id, reason, banned_at FROM blocked_users ORDER BY banned_at DESC LIMIT 20"
   );
   return result.rows;
+}
+
+// ─── TITLE HELPERS ─────────────────────────────────────────────────────────
+
+async function setLinkTitle(code, title) {
+  const result = await pool.query(
+    "UPDATE links SET title = $1 WHERE code = $2 RETURNING code",
+    [title.trim(), code]
+  );
+  return result.rows.length > 0 ? "ok" : "not_found";
+}
+
+async function getLinkTitle(code) {
+  const result = await pool.query(
+    "SELECT title FROM links WHERE code = $1",
+    [code]
+  );
+  return result.rows[0]?.title || null;
 }
 
 // ─── EDIT LINK HELPERS ─────────────────────────────────────────────────────
@@ -312,7 +331,7 @@ async function removeFileFromLink(code, indexes) {
   return { status: "ok", remaining: ids.length, removed: indexes.length };
 }
 
-async function saveLink(data, ownerId) {
+async function saveLink(data, ownerId, title = null) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let code;
   let exists = true;
@@ -332,8 +351,8 @@ async function saveLink(data, ownerId) {
     : null;
 
   await pool.query(
-    "INSERT INTO links (code, type, data, owner_id, expires_at) VALUES ($1, $2, $3, $4, $5)",
-    [code, data.type, JSON.stringify(data), ownerId || null, expiresAt]
+    "INSERT INTO links (code, type, data, owner_id, expires_at, title) VALUES ($1, $2, $3, $4, $5, $6)",
+    [code, data.type, JSON.stringify(data), ownerId || null, expiresAt, title || null]
   );
 
   return code;
@@ -711,6 +730,9 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
     const fileCount = linkData.type === "multi" ? linkData.ids.length : 1;
     const fileLabel = fileCount > 1 ? `${fileCount} file` : "1 file";
 
+    // Ambil judul link
+    const linkTitle = await getLinkTitle(param);
+
     // FIX: Selalu buat session baru setiap /start dengan code
     await createSession(param, userId);
 
@@ -723,7 +745,8 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
       );
     }
 
-    const webAppUrl = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&uid=${userId}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}&bot=${BOT_USERNAME}`;
+    const titleLine  = linkTitle ? `🏷️ *${linkTitle}*\n\n` : "";
+    const webAppUrl  = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&uid=${userId}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}&bot=${BOT_USERNAME}&title=${encodeURIComponent(linkTitle || "")}`;
 
     console.log(`[START] User ${userId} → code: ${param}`);
     console.log(`[START] WebApp URL: ${webAppUrl}`);
@@ -731,6 +754,7 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
     return bot.sendMessage(
       chatId,
       `📦 *${fileLabel} siap diakses!*\n\n` +
+      titleLine +
       `Klik tombol di bawah, iklan akan terbuka otomatis.\n` +
       `Tunggu timer selesai lalu klik *Ambil File*.\n\n` +
       `⚠️ _Proses ini tidak bisa dilewati._`,
@@ -796,6 +820,7 @@ bot.onText(/\/help/, async (msg) => {
     `• /help — Bantuan ini\n\n` +
     `*Perintah Kelola Link:*\n` +
     `• /delete \\[code\\] — Hapus link\n` +
+    `• /settitle \\[code\\] \\[judul\\] — Ubah judul link\n` +
     `  _Contoh: /delete AbCd1234_` +
     editSection +
     adminSection + `\n\n` +
@@ -1145,6 +1170,56 @@ bot.onText(/\/linkdetail(?:\s+(\S+))?/, async (msg, match) => {
   await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 });
 
+// ─── /settitle ─────────────────────────────────────────────────────────────
+// Set/ubah judul link. Format: /settitle [code] [judul]
+// Siapa saja pemilik link bisa pakai (bukan hanya admin).
+bot.onText(/\/settitle(?:\s+(\S+))?(?:\s+(.+))?/, async (msg, match) => {
+  const chatId  = msg.chat.id;
+  const userId  = msg.from.id;
+  const code    = match[1];
+  const title   = match[2]?.trim();
+
+  if (!code || !title) {
+    return bot.sendMessage(
+      chatId,
+      `⚠️ Format: /settitle \\[code\\] \\[judul\\]\n\n` +
+      `_Contoh:_ /settitle AbCd1234 Materi Belajar Python`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  // Cek link ada & milik user (atau admin)
+  const raw = await getRawLink(code);
+  if (!raw) {
+    return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  }
+
+  const isAdmin = ADMIN_IDS.includes(userId);
+  if (raw.owner_id !== userId && !isAdmin) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengubah judul link ini.");
+  }
+
+  // Batasi panjang judul
+  if (title.length > 100) {
+    return bot.sendMessage(chatId, "⚠️ Judul terlalu panjang. Maksimal 100 karakter.");
+  }
+
+  const result = await setLinkTitle(code, title);
+  if (result === "not_found") {
+    return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
+  }
+
+  console.log(`[SETTITLE] Link ${code} → judul: "${title}" oleh user ${userId}`);
+
+  await bot.sendMessage(
+    chatId,
+    `✅ *Judul berhasil diubah!*\n\n` +
+    `🔑 Link: \`${code}\`\n` +
+    `🏷️ Judul baru: *${title}*`,
+    { parse_mode: "Markdown" }
+  );
+});
+
 // ─── /ban ──────────────────────────────────────────────────────────────────
 // Hanya admin. Format: /ban [user_id] [alasan opsional]
 bot.onText(/\/ban(?:\s+(\d+))?(?:\s+(.+))?/, async (msg, match) => {
@@ -1442,17 +1517,20 @@ bot.onText(/\/done/, async (msg) => {
       ? { type: "single", id: session.storedIds[0] }
       : { type: "multi", ids: session.storedIds };
 
-    const code       = await saveLink(linkData, userId);
-    const shareLink  = makeShareLink(code);
-    const expireDays = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
+    const defaultTitle = `Paket ${session.storedIds.length} File`;
+    const code         = await saveLink(linkData, userId, defaultTitle);
+    const shareLink    = makeShareLink(code);
+    const expireDays   = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
 
     await bot.deleteMessage(chatId, loadingMsg.message_id);
     await bot.sendMessage(
       chatId,
       `✅ *${session.storedIds.length} file berhasil diupload!*\n\n` +
+      `🏷️ *Judul:* ${defaultTitle}\n` +
       `🔑 Kode: \`${code}\`\n` +
       `🔗 *Link Share:*\n\`${shareLink}\`\n\n` +
       `⏳ Expired: ${expireDays > 0 ? `${expireDays} hari` : "Tidak ada"}\n\n` +
+      `_Ubah judul: /settitle ${code} Judul Baru_\n` +
       `_Penerima perlu membuka iklan sebelum mengakses file._`,
       {
         parse_mode: "Markdown",
@@ -1717,9 +1795,6 @@ bot.on("message", async (msg) => {
 
   try {
     const storedMessageId = await forwardToStorage(chatId, msg.message_id);
-    const code       = await saveLink({ type: "single", id: storedMessageId }, userId);
-    const shareLink  = makeShareLink(code);
-    const expireDays = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
 
     const fileName =
       msg.document?.file_name ||
@@ -1727,14 +1802,21 @@ bot.on("message", async (msg) => {
       msg.audio?.file_name ||
       (mediaType.charAt(0).toUpperCase() + mediaType.slice(1));
 
+    // Simpan title default dari nama file
+    const code      = await saveLink({ type: "single", id: storedMessageId }, userId, fileName);
+    const shareLink = makeShareLink(code);
+    const expireDays = parseInt(process.env.LINK_EXPIRE_DAYS) || 0;
+
     await bot.deleteMessage(chatId, loadingMsg.message_id);
     await bot.sendMessage(
       chatId,
       `✅ *File berhasil diupload!*\n\n` +
       `${emoji} *Nama:* ${fileName}\n` +
+      `🏷️ *Judul:* ${fileName}\n` +
       `🔑 *Kode:* \`${code}\`\n` +
       `⏳ *Expired:* ${expireDays > 0 ? `${expireDays} hari` : "Tidak ada"}\n\n` +
       `🔗 *Link Share:*\n\`${shareLink}\`\n\n` +
+      `_Ubah judul: /settitle ${code} Judul Baru_\n` +
       `_Penerima perlu membuka iklan sebelum mengakses file._`,
       {
         parse_mode: "Markdown",
