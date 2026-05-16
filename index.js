@@ -272,22 +272,28 @@ async function addFileToLink(code, newStoredId) {
   return ids.length;
 }
 
-// Hapus file tertentu dari link berdasarkan nomor urut (1-based)
-async function removeFileFromLink(code, index) {
+// Hapus beberapa file sekaligus dari link berdasarkan nomor urut (1-based)
+// indexes = array of number, misal [1, 3]
+async function removeFileFromLink(code, indexes) {
   const raw = await getRawLink(code);
   if (!raw) return { status: "not_found" };
 
   let ids = raw.type === "single" ? [raw.data.id] : [...raw.data.ids];
 
-  if (index < 1 || index > ids.length) {
-    return { status: "out_of_range", total: ids.length };
+  // Validasi semua index
+  const invalid = indexes.filter(i => i < 1 || i > ids.length);
+  if (invalid.length > 0) {
+    return { status: "out_of_range", total: ids.length, invalid };
   }
 
-  ids.splice(index - 1, 1);
-
-  if (ids.length === 0) {
+  // Cek apakah akan jadi kosong
+  if (indexes.length >= ids.length) {
     return { status: "empty" };
   }
+
+  // Hapus dari belakang agar index tidak bergeser
+  const sortedDesc = [...new Set(indexes)].sort((a, b) => b - a);
+  sortedDesc.forEach(i => ids.splice(i - 1, 1));
 
   let newType, newData;
   if (ids.length === 1) {
@@ -303,7 +309,7 @@ async function removeFileFromLink(code, index) {
     [newType, JSON.stringify(newData), code]
   );
 
-  return { status: "ok", remaining: ids.length };
+  return { status: "ok", remaining: ids.length, removed: indexes.length };
 }
 
 async function saveLink(data, ownerId) {
@@ -980,13 +986,16 @@ bot.onText(/\/addfile(?:\s+(\S+))?/, async (msg, match) => {
   );
 });
 
-// ─── /removefile [code] [nomor] ────────────────────────────────────────────
-// Hapus file ke-N dari link multi. Tampilkan daftar file jika nomor tidak disertakan.
-bot.onText(/\/removefile(?:\s+(\S+))?(?:\s+(\d+))?/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const code   = match[1];
-  const index  = match[2] ? parseInt(match[2]) : null;
+// ─── /removefile [code] [nomor...] ────────────────────────────────────────
+// Hapus satu atau beberapa file dari link.
+// Format: /removefile AbCd1234 2
+//         /removefile AbCd1234 1 3
+//         /removefile AbCd1234 1,3,5
+bot.onText(/\/removefile(?:\s+(\S+))?(?:\s+(.+))?/, async (msg, match) => {
+  const chatId    = msg.chat.id;
+  const userId    = msg.from.id;
+  const code      = match[1];
+  const rawNomor  = match[2] || "";
 
   if (!isAllowedToEdit(userId)) {
     return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk fitur ini.");
@@ -995,7 +1004,10 @@ bot.onText(/\/removefile(?:\s+(\S+))?(?:\s+(\d+))?/, async (msg, match) => {
   if (!code) {
     return bot.sendMessage(
       chatId,
-      "⚠️ Sertakan kode link dan nomor file.\n\n_Contoh:_ /removefile AbCd1234 2",
+      "⚠️ Sertakan kode link dan nomor file.\n\n" +
+      "_Contoh hapus 1 file:_ /removefile AbCd1234 2\n" +
+      "_Contoh hapus beberapa:_ /removefile AbCd1234 1 3 5\n" +
+      "_Atau dengan koma:_ /removefile AbCd1234 1,3,5",
       { parse_mode: "Markdown" }
     );
   }
@@ -1008,43 +1020,71 @@ bot.onText(/\/removefile(?:\s+(\S+))?(?:\s+(\d+))?/, async (msg, match) => {
   const ids  = raw.type === "single" ? [raw.data.id] : raw.data.ids;
 
   // Jika nomor tidak disertakan → tampilkan daftar file
-  if (!index) {
+  if (!rawNomor.trim()) {
     let text = `📋 *Daftar File di Link* \`${code}\`\n`;
     text += `━━━━━━━━━━━━━━━━\n`;
     ids.forEach((id, i) => {
       text += `*${i + 1}.* Message ID: \`${id}\`\n`;
     });
-    text += `\nGunakan: /removefile ${code} [nomor]`;
+    text += `\nGunakan: /removefile ${code} [nomor]\n`;
+    text += `_Bisa lebih dari satu, pisah spasi atau koma_\n`;
+    text += `_Contoh: /removefile ${code} 1 3_`;
     return bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
   }
 
-  // Proses hapus
-  const result = await removeFileFromLink(code, index);
+  // Parse nomor: support spasi dan koma sebagai pemisah
+  const indexes = rawNomor
+    .split(/[\s,]+/)
+    .map(s => parseInt(s.trim()))
+    .filter(n => !isNaN(n));
+
+  if (indexes.length === 0) {
+    return bot.sendMessage(
+      chatId,
+      "⚠️ Nomor file tidak valid.\n\n_Contoh: /removefile AbCd1234 1 3_",
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  // Duplikat tidak diproses dua kali
+  const uniqueIndexes = [...new Set(indexes)];
+
+  const result = await removeFileFromLink(code, uniqueIndexes);
 
   if (result.status === "not_found") {
     return bot.sendMessage(chatId, `❌ Link \`${code}\` tidak ditemukan.`, { parse_mode: "Markdown" });
   }
+
   if (result.status === "out_of_range") {
     return bot.sendMessage(
       chatId,
-      `⚠️ Nomor tidak valid. Link ini hanya punya *${result.total} file*.\n\nGunakan: /removefile ${code} [1-${result.total}]`,
+      `⚠️ Nomor tidak valid: *${result.invalid.join(", ")}*\n` +
+      `Link ini hanya punya *${result.total} file* (nomor 1–${result.total}).\n\n` +
+      `Gunakan /removefile ${code} untuk lihat daftar file.`,
       { parse_mode: "Markdown" }
     );
   }
+
   if (result.status === "empty") {
     return bot.sendMessage(
       chatId,
-      `⚠️ Tidak bisa menghapus — link akan jadi kosong.\nGunakan /delete ${code} jika ingin menghapus link sepenuhnya.`,
+      `⚠️ Tidak bisa menghapus semua file — link akan jadi kosong.\n` +
+      `Gunakan /delete \`${code}\` jika ingin menghapus link sepenuhnya.`,
       { parse_mode: "Markdown" }
     );
   }
 
-  console.log(`[REMOVEFILE] File ke-${index} dari link ${code} dihapus oleh user ${userId}`);
+  const nomorLabel = uniqueIndexes.length === 1
+    ? `ke-${uniqueIndexes[0]}`
+    : `ke-${uniqueIndexes.join(", ")}`;
+
+  console.log(`[REMOVEFILE] File ${nomorLabel} dari link ${code} dihapus oleh user ${userId}`);
 
   await bot.sendMessage(
     chatId,
-    `✅ *File ke-${index} berhasil dihapus!*\n\n` +
+    `✅ *File ${nomorLabel} berhasil dihapus!*\n\n` +
     `Link: \`${code}\`\n` +
+    `Dihapus: *${result.removed} file*\n` +
     `File tersisa: *${result.remaining} file*`,
     { parse_mode: "Markdown" }
   );
