@@ -926,16 +926,16 @@ bot.onText(/\/replace(?:\s+(\S+))?/, async (msg, match) => {
   if (access === "forbidden")  return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengedit link ini.");
 
   // Simpan state edit
-  editMode.set(userId, { action: "replace", code });
+  editMode.set(userId, { action: "replace", code, storedIds: [], mediaGroups: new Map() });
 
   await bot.sendMessage(
     chatId,
     `🔄 *Mode Ganti File*\n\n` +
     `Link: \`${code}\`\n\n` +
-    `Kirimkan *1 file baru* sekarang.\n` +
-    `Semua file lama dalam link ini akan diganti.\n\n` +
-    `Ketik /canceledit untuk membatalkan.`,
-    { parse_mode: "Markdown" }
+    `Kirimkan file pengganti \\(boleh lebih dari 1 atau album\\)\\.\n` +
+    `Ketik /done jika selesai\\.\n` +
+    `Ketik /canceledit untuk membatalkan\\.`,
+    { parse_mode: "MarkdownV2" }
   );
 });
 
@@ -966,16 +966,17 @@ bot.onText(/\/addfile(?:\s+(\S+))?/, async (msg, match) => {
   const raw = await getRawLink(code);
   const currentCount = raw.type === "single" ? 1 : raw.data.ids.length;
 
-  editMode.set(userId, { action: "add", code });
+  editMode.set(userId, { action: "add", code, mediaGroups: new Map() });
 
   await bot.sendMessage(
     chatId,
     `➕ *Mode Tambah File*\n\n` +
     `Link: \`${code}\`\n` +
     `File saat ini: *${currentCount} file*\n\n` +
-    `Kirimkan file yang ingin ditambahkan.\n` +
-    `Kirim satu per satu, ketik /canceledit jika selesai atau batal.`,
-    { parse_mode: "Markdown" }
+    `Kirimkan file yang ingin ditambahkan \\(boleh album\\)\\.\n` +
+    `Ketik /done jika selesai\\.\n` +
+    `Ketik /canceledit untuk membatalkan\\.`,
+    { parse_mode: "MarkdownV2" }
   );
 });
 
@@ -1305,6 +1306,84 @@ bot.onText(/\/done/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
+  // ── Selesaikan sesi editMode (replace / add) ────────────────────────────
+  if (editMode.has(userId)) {
+    const session = editMode.get(userId);
+    editMode.delete(userId);
+
+    // REPLACE: simpan semua file yang sudah dikumpulkan
+    if (session.action === "replace") {
+      const ids = session.storedIds || [];
+      if (ids.length === 0) {
+        return bot.sendMessage(chatId, "⚠️ Belum ada file yang dikirim. Sesi dibatalkan.");
+      }
+
+      const loadingMsg = await bot.sendMessage(chatId, "⏳ Mengganti file...");
+      try {
+        let newType, newData;
+        if (ids.length === 1) {
+          newType = "single";
+          newData = { type: "single", id: ids[0] };
+        } else {
+          newType = "multi";
+          newData = { type: "multi", ids };
+        }
+        await pool.query(
+          "UPDATE links SET type = $1, data = $2 WHERE code = $3",
+          [newType, JSON.stringify(newData), session.code]
+        );
+
+        const shareLink = makeShareLink(session.code);
+        await bot.deleteMessage(chatId, loadingMsg.message_id);
+        await bot.sendMessage(
+          chatId,
+          `✅ *File berhasil diganti!*\n\n` +
+          `🔑 Link: \`${session.code}\`\n` +
+          `📦 Total file baru: *${ids.length}*\n` +
+          `🔗 ${shareLink}\n\n` +
+          `_Semua file lama telah diganti._`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[{ text: "📤 Bagikan Link", url: shareLink }]],
+            },
+          }
+        );
+        console.log(`[REPLACE] Link ${session.code} diganti ${ids.length} file oleh user ${userId}`);
+      } catch (err) {
+        console.error("Error replace done:", err.message);
+        await bot.editMessageText("❌ Gagal mengganti file.", {
+          chat_id: chatId, message_id: loadingMsg.message_id,
+        });
+      }
+      return;
+    }
+
+    // ADD: konfirmasi selesai tambah file
+    if (session.action === "add") {
+      const raw   = await getRawLink(session.code);
+      const total = raw ? (raw.type === "single" ? 1 : raw.data.ids.length) : 0;
+      const shareLink = makeShareLink(session.code);
+
+      await bot.sendMessage(
+        chatId,
+        `✅ *Selesai menambah file!*\n\n` +
+        `🔑 Link: \`${session.code}\`\n` +
+        `📦 Total file sekarang: *${total}*\n` +
+        `🔗 ${shareLink}`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [[{ text: "📤 Bagikan Link", url: shareLink }]],
+          },
+        }
+      );
+      console.log(`[ADDFILE] Sesi selesai — link ${session.code}, total: ${total} file, user: ${userId}`);
+      return;
+    }
+  }
+
+  // ── Selesaikan sesi multiMode (upload biasa) ────────────────────────────
   if (!multiMode.has(userId)) {
     return bot.sendMessage(chatId, "⚠️ Kamu tidak sedang dalam mode multi file.\nKetik /multi untuk memulai.");
   }
@@ -1353,7 +1432,8 @@ bot.onText(/\/done/, async (msg) => {
 });
 
 // ─── /cancel ───────────────────────────────────────────────────────────────
-bot.onText(/\/cancel/, async (msg) => {
+// Regex exact: /cancel$ agar tidak ikut menangkap /canceledit
+bot.onText(/\/cancel$/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
@@ -1418,52 +1498,117 @@ bot.on("message", async (msg) => {
   if (editMode.has(userId)) {
     const session = editMode.get(userId);
 
-    // ── REPLACE: ganti semua file, selesai otomatis setelah 1 file ──────────
+    // ── REPLACE: support multi file via album, selesai dengan /done ──────────
     if (session.action === "replace") {
-      editMode.delete(userId);
-      const processingMsg = await bot.sendMessage(chatId, "⏳ Mengganti file...");
+
+      // Tangani album (media_group)
+      if (msg.media_group_id) {
+        const groupId = msg.media_group_id;
+        if (!session.mediaGroups) session.mediaGroups = new Map();
+        if (!session.mediaGroups.has(groupId)) {
+          session.mediaGroups.set(groupId, { msgs: [], timer: null });
+        }
+        const group = session.mediaGroups.get(groupId);
+        group.msgs.push(msg);
+
+        if (group.timer) clearTimeout(group.timer);
+        group.timer = setTimeout(async () => {
+          session.mediaGroups.delete(groupId);
+          if (!session.storedIds) session.storedIds = [];
+          const processingMsg = await bot.sendMessage(chatId, `⏳ Memproses ${group.msgs.length} file dari album...`);
+          try {
+            for (const m of group.msgs) {
+              const storedId = await forwardToStorage(chatId, m.message_id);
+              session.storedIds.push(storedId);
+            }
+            await bot.editMessageText(
+              `✅ *${group.msgs.length} file* dari album ditambahkan!\n` +
+              `📦 Total: *${session.storedIds.length} file*\n\n` +
+              `_Kirim file lagi atau ketik /done jika selesai._`,
+              { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: "Markdown" }
+            );
+          } catch (err) {
+            console.error("Error forward album replace:", err.message);
+            await bot.editMessageText("❌ Gagal memproses album.", {
+              chat_id: chatId, message_id: processingMsg.message_id,
+            });
+          }
+        }, 1500);
+        return;
+      }
+
+      // File tunggal
+      if (!session.storedIds) session.storedIds = [];
+      const processingMsg = await bot.sendMessage(chatId, "⏳ Memproses file...");
       try {
         const storedId = await forwardToStorage(chatId, msg.message_id);
-        await replaceLinkFiles(session.code, storedId);
-        const shareLink = makeShareLink(session.code);
-        await bot.deleteMessage(chatId, processingMsg.message_id);
-        await bot.sendMessage(
-          chatId,
-          `✅ *File berhasil diganti!*\n\n` +
-          `🔑 Link: \`${session.code}\`\n` +
-          `🔗 ${shareLink}\n\n` +
-          `_Semua file lama telah diganti dengan file baru._`,
-          {
-            parse_mode: "Markdown",
-            reply_markup: {
-              inline_keyboard: [[{ text: "📤 Bagikan Link", url: shareLink }]],
-            },
-          }
+        session.storedIds.push(storedId);
+        await bot.editMessageText(
+          `${emoji} *File ke-${session.storedIds.length} diterima!*\n\n` +
+          `🔑 Link: \`${session.code}\`\n\n` +
+          `_Kirim file lagi atau ketik /done jika selesai._`,
+          { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: "Markdown" }
         );
-        console.log(`[REPLACE] Link ${session.code} diganti oleh user ${userId}`);
       } catch (err) {
-        console.error("Error replace file:", err.message);
-        await bot.editMessageText("❌ Gagal mengganti file.", {
+        console.error("Error forward file replace:", err.message);
+        await bot.editMessageText("❌ Gagal memproses file.", {
           chat_id: chatId, message_id: processingMsg.message_id,
         });
       }
       return;
     }
 
-    // ── ADD: tambah file, mode tetap aktif sampai /canceledit ───────────────
+    // ── ADD: tambah file, mode tetap aktif sampai /done ─────────────────────
     if (session.action === "add") {
+
+      // Tangani album (media_group)
+      if (msg.media_group_id) {
+        const groupId = msg.media_group_id;
+        if (!session.mediaGroups) session.mediaGroups = new Map();
+        if (!session.mediaGroups.has(groupId)) {
+          session.mediaGroups.set(groupId, { msgs: [], timer: null });
+        }
+        const group = session.mediaGroups.get(groupId);
+        group.msgs.push(msg);
+
+        if (group.timer) clearTimeout(group.timer);
+        group.timer = setTimeout(async () => {
+          session.mediaGroups.delete(groupId);
+          const processingMsg = await bot.sendMessage(chatId, `⏳ Memproses ${group.msgs.length} file dari album...`);
+          try {
+            let totalFiles = 0;
+            for (const m of group.msgs) {
+              const storedId = await forwardToStorage(chatId, m.message_id);
+              totalFiles = await addFileToLink(session.code, storedId);
+            }
+            await bot.editMessageText(
+              `✅ *${group.msgs.length} file* dari album ditambahkan!\n` +
+              `📦 Total file sekarang: *${totalFiles}*\n\n` +
+              `_Kirim file lagi atau ketik /done jika selesai._`,
+              { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: "Markdown" }
+            );
+            console.log(`[ADDFILE] Album ${group.msgs.length} file ke link ${session.code} oleh user ${userId}, total: ${totalFiles}`);
+          } catch (err) {
+            console.error("Error forward album addfile:", err.message);
+            await bot.editMessageText("❌ Gagal memproses album.", {
+              chat_id: chatId, message_id: processingMsg.message_id,
+            });
+          }
+        }, 1500);
+        return;
+      }
+
+      // File tunggal
       const processingMsg = await bot.sendMessage(chatId, "⏳ Menambahkan file...");
       try {
-        const storedId    = await forwardToStorage(chatId, msg.message_id);
-        const totalFiles  = await addFileToLink(session.code, storedId);
-        await bot.deleteMessage(chatId, processingMsg.message_id);
-        await bot.sendMessage(
-          chatId,
+        const storedId   = await forwardToStorage(chatId, msg.message_id);
+        const totalFiles = await addFileToLink(session.code, storedId);
+        await bot.editMessageText(
           `${emoji} *File ditambahkan!*\n\n` +
           `🔑 Link: \`${session.code}\`\n` +
           `📦 Total file sekarang: *${totalFiles}*\n\n` +
-          `_Kirim file lagi untuk menambah, atau /canceledit jika selesai._`,
-          { parse_mode: "Markdown" }
+          `_Kirim file lagi atau ketik /done jika selesai._`,
+          { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: "Markdown" }
         );
         console.log(`[ADDFILE] File ditambahkan ke link ${session.code} oleh user ${userId}, total: ${totalFiles}`);
       } catch (err) {
