@@ -6,106 +6,6 @@ const cors = require("cors");
 const { httpLimiter, checkBotLimit, formatTimeLeft } = require("./rateLimiter");
 const crypto = require("crypto");
 
-// ─── VALIDASI initData TELEGRAM WEBAPP ────────────────────────────────────
-// Dokumen resmi: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
-//
-// Cara kerja:
-//  1. Frontend mengirim tg.initData (string query) ke backend
-//  2. Backend hitung HMAC-SHA256 menggunakan secret key turunan dari BOT_TOKEN
-//  3. Bandingkan hash yang dihitung dengan hash yang ada di initData
-//  4. Cek juga auth_date agar initData lama tidak bisa dipakai ulang
-//
-// Mengembalikan objek user jika valid, null jika tidak valid.
-
-function verifyTelegramInitData(initData) {
-  try {
-    if (!initData || typeof initData !== "string") return null;
-
-    const params     = new URLSearchParams(initData);
-    const hash       = params.get("hash");
-    const authDate   = parseInt(params.get("auth_date") || "0");
-
-    if (!hash || !authDate) return null;
-
-    // Tolak initData yang sudah lebih dari 1 jam (3600 detik)
-    const MAX_AGE_SECONDS = 3600;
-    const ageSecs         = Math.floor(Date.now() / 1000) - authDate;
-    if (ageSecs > MAX_AGE_SECONDS) {
-      console.warn(`[INITDATA] Kedaluarsa — usia: ${ageSecs}s`);
-      return null;
-    }
-
-    // Susun data-check-string: semua field kecuali hash, urut alfabet, pisah \n
-    params.delete("hash");
-    const dataCheckString = Array.from(params.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
-
-    // Secret key = HMAC-SHA256("WebAppData", BOT_TOKEN)
-    const secretKey = crypto
-      .createHmac("sha256", "WebAppData")
-      .update(BOT_TOKEN)
-      .digest();
-
-    // Hash yang seharusnya
-    const expectedHash = crypto
-      .createHmac("sha256", secretKey)
-      .update(dataCheckString)
-      .digest("hex");
-
-    if (expectedHash !== hash) {
-      console.warn("[INITDATA] Hash tidak cocok — kemungkinan data dipalsukan");
-      return null;
-    }
-
-    // Parse field user
-    const userRaw = params.get("user");
-    if (!userRaw) return null;
-
-    const user = JSON.parse(userRaw);
-    return user; // { id, first_name, username, ... }
-
-  } catch (err) {
-    console.error("[INITDATA] Error validasi:", err.message);
-    return null;
-  }
-}
-
-// ─── MIDDLEWARE: wajib initData valid untuk endpoint sensitif ──────────────
-// Dipasang di /claim.
-// Jika initData valid → userId diambil dari sana (bukan dari body).
-// Jika initData tidak ada → fallback ke user_id dari body (kompatibilitas
-//   desktop / pengembangan). Jika ada tapi invalid → tolak langsung.
-
-function requireValidInitData(req, res, next) {
-  const initData = req.body?.init_data || req.body?.initData || "";
-
-  // Tidak ada initData → fallback (izinkan, tapi user_id dari body tetap dipakai)
-  if (!initData) {
-    console.warn(`[INITDATA] Tidak ada initData dari IP: ${
-      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress
-    } — fallback ke user_id body`);
-    return next();
-  }
-
-  // Ada initData → wajib valid
-  const user = verifyTelegramInitData(initData);
-  if (!user) {
-    return res.status(403).json({
-      ok:    false,
-      error: "Data autentikasi Telegram tidak valid atau kedaluarsa. Buka ulang WebApp dari bot.",
-    });
-  }
-
-  // Tempel user terverifikasi ke request agar handler bisa pakai
-  req.telegramUser   = user;
-  req.verifiedUserId = user.id;
-
-  console.log(`[INITDATA] Valid — user: ${user.id} (@${user.username || "-"})`);
-  next();
-}
-
 // ─── EXPRESS ───────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors({
@@ -255,20 +155,11 @@ async function canEditLink(code, userId) {
 // Ambil data link mentah (tanpa cek expiry) untuk keperluan edit
 async function getRawLink(code) {
   const result = await pool.query(
-    "SELECT data, type, owner_id FROM links WHERE code = $1",
+    "SELECT data, type, owner_id, expires_at FROM links WHERE code = $1",
     [code]
   );
   if (result.rows.length === 0) return null;
   return result.rows[0];
-}
-
-// Ganti semua isi link dengan file baru (apapun tipenya → single)
-async function replaceLinkFiles(code, newStoredId) {
-  const newData = { type: "single", id: newStoredId };
-  await pool.query(
-    "UPDATE links SET type = $1, data = $2 WHERE code = $3",
-    ["single", JSON.stringify(newData), code]
-  );
 }
 
 // Tambah file ke link — jika single jadi multi, jika multi append
@@ -412,7 +303,7 @@ async function getStats(userId) {
     };
   } else {
     const result  = await pool.query(
-      "SELECT code, type, download_count, created_at, expires_at FROM links WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 10",
+      "SELECT code, type, title, download_count, created_at, expires_at FROM links WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 10",
       [userId]
     );
     const totalDl = await pool.query(
@@ -454,6 +345,86 @@ if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
   console.warn("⚠️  PERINGATAN: WEBAPP_URL atau WEBAPP_BACKEND_URL belum diisi — fitur WebApp tidak akan berfungsi!");
 }
 
+// ─── VALIDASI initData TELEGRAM WEBAPP ────────────────────────────────────
+// Dipindah ke sini agar BOT_TOKEN sudah terdefinisi saat fungsi dieksekusi.
+// Dokumen resmi: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+
+function verifyTelegramInitData(initData) {
+  try {
+    if (!initData || typeof initData !== "string") return null;
+
+    const params   = new URLSearchParams(initData);
+    const hash     = params.get("hash");
+    const authDate = parseInt(params.get("auth_date") || "0");
+
+    if (!hash || !authDate) return null;
+
+    // Tolak initData yang sudah lebih dari 1 jam (3600 detik)
+    const MAX_AGE_SECONDS = 3600;
+    const ageSecs         = Math.floor(Date.now() / 1000) - authDate;
+    if (ageSecs > MAX_AGE_SECONDS) {
+      console.warn(`[INITDATA] Kedaluarsa — usia: ${ageSecs}s`);
+      return null;
+    }
+
+    // Susun data-check-string: semua field kecuali hash, urut alfabet, pisah \n
+    params.delete("hash");
+    const dataCheckString = Array.from(params.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+
+    // Secret key = HMAC-SHA256("WebAppData", BOT_TOKEN)
+    const secretKey = crypto
+      .createHmac("sha256", "WebAppData")
+      .update(BOT_TOKEN)
+      .digest();
+
+    const expectedHash = crypto
+      .createHmac("sha256", secretKey)
+      .update(dataCheckString)
+      .digest("hex");
+
+    if (expectedHash !== hash) {
+      console.warn("[INITDATA] Hash tidak cocok — kemungkinan data dipalsukan");
+      return null;
+    }
+
+    const userRaw = params.get("user");
+    if (!userRaw) return null;
+
+    return JSON.parse(userRaw); // { id, first_name, username, ... }
+
+  } catch (err) {
+    console.error("[INITDATA] Error validasi:", err.message);
+    return null;
+  }
+}
+
+function requireValidInitData(req, res, next) {
+  const initData = req.body?.init_data || req.body?.initData || "";
+
+  if (!initData) {
+    console.warn(`[INITDATA] Tidak ada initData dari IP: ${
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress
+    } — fallback ke user_id body`);
+    return next();
+  }
+
+  const user = verifyTelegramInitData(initData);
+  if (!user) {
+    return res.status(403).json({
+      ok:    false,
+      error: "Data autentikasi Telegram tidak valid atau kedaluarsa. Buka ulang WebApp dari bot.",
+    });
+  }
+
+  req.telegramUser   = user;
+  req.verifiedUserId = user.id;
+  console.log(`[INITDATA] Valid — user: ${user.id} (@${user.username || "-"})`);
+  next();
+}
+
 // ─── BOT INIT dengan auto-retry saat 409 Conflict ─────────────────────────
 // Railway rolling deploy menyebabkan 2 container jalan bersamaan sementara.
 // Solusi: mulai polling: false dulu, lalu panggil startPolling() di initDB.
@@ -481,6 +452,64 @@ const multiMode = new Map();
 // editMode menyimpan state sementara saat user sedang dalam sesi edit
 // Map<userId, { action: "replace"|"add", code: string }>
 const editMode = new Map();
+
+// ─── TIMEOUT HELPER untuk multiMode & editMode ────────────────────────────
+// Sesi yang tidak selesai dalam 30 menit otomatis dibatalkan
+// agar Map tidak menumpuk di memory selamanya
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 menit
+
+function setMultiModeWithTimeout(userId, chatId, data) {
+  // Hapus timeout lama jika ada
+  if (multiMode.has(userId) && multiMode.get(userId)._timeout) {
+    clearTimeout(multiMode.get(userId)._timeout);
+  }
+  const timeout = setTimeout(async () => {
+    if (multiMode.has(userId)) {
+      multiMode.delete(userId);
+      try {
+        await bot.sendMessage(
+          chatId,
+          "⏰ Sesi multi file otomatis dibatalkan karena tidak ada aktivitas selama 30 menit."
+        );
+      } catch (_) {}
+    }
+  }, SESSION_TIMEOUT_MS);
+  multiMode.set(userId, { ...data, _timeout: timeout });
+}
+
+function setEditModeWithTimeout(userId, chatId, data) {
+  if (editMode.has(userId) && editMode.get(userId)._timeout) {
+    clearTimeout(editMode.get(userId)._timeout);
+  }
+  const timeout = setTimeout(async () => {
+    if (editMode.has(userId)) {
+      editMode.delete(userId);
+      try {
+        await bot.sendMessage(
+          chatId,
+          "⏰ Sesi edit otomatis dibatalkan karena tidak ada aktivitas selama 30 menit."
+        );
+      } catch (_) {}
+    }
+  }, SESSION_TIMEOUT_MS);
+  editMode.set(userId, { ...data, _timeout: timeout });
+}
+
+function deleteMultiMode(userId) {
+  if (multiMode.has(userId)) {
+    const s = multiMode.get(userId);
+    if (s._timeout) clearTimeout(s._timeout);
+    multiMode.delete(userId);
+  }
+}
+
+function deleteEditMode(userId) {
+  if (editMode.has(userId)) {
+    const s = editMode.get(userId);
+    if (s._timeout) clearTimeout(s._timeout);
+    editMode.delete(userId);
+  }
+}
 
 // ─── HELPER ────────────────────────────────────────────────────────────────
 function isAllowed(userId) {
@@ -690,8 +719,9 @@ app.get("/linkinfo", async (req, res) => {
     }
 
     const fileCount = linkData.type === "multi" ? linkData.ids.length : 1;
+    const title     = await getLinkTitle(code);
 
-    return res.json({ ok: true, fileCount, type: linkData.type });
+    return res.json({ ok: true, fileCount, type: linkData.type, title: title || "" });
   } catch (err) {
     console.error("[LINKINFO] Error:", err.message);
     return res.json({ ok: false, error: "Terjadi kesalahan server." });
@@ -745,8 +775,8 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
       );
     }
 
-    const titleLine  = linkTitle ? `🏷️ *${linkTitle}*\n\n` : "";
-    const webAppUrl  = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&uid=${userId}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}&bot=${BOT_USERNAME}&title=${encodeURIComponent(linkTitle || "")}`;
+    const titleLine = linkTitle ? `🏷️ *${linkTitle}*\n\n` : "";
+    const webAppUrl = `${WEBAPP_URL}?code=${encodeURIComponent(param)}&uid=${userId}&wait=${AD_WAIT_SECONDS}&ad=${encodeURIComponent(AD_URL)}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}&bot=${BOT_USERNAME}`;
 
     console.log(`[START] User ${userId} → code: ${param}`);
     console.log(`[START] WebApp URL: ${webAppUrl}`);
@@ -820,8 +850,9 @@ bot.onText(/\/help/, async (msg) => {
     `• /help — Bantuan ini\n\n` +
     `*Perintah Kelola Link:*\n` +
     `• /delete \\[code\\] — Hapus link\n` +
+    `  _Contoh: /delete AbCd1234_\n` +
     `• /settitle \\[code\\] \\[judul\\] — Ubah judul link\n` +
-    `  _Contoh: /delete AbCd1234_` +
+    `  _Contoh: /settitle AbCd1234 Judul Baru_` +
     editSection +
     adminSection + `\n\n` +
     `*Cara buat link:*\n` +
@@ -874,7 +905,9 @@ bot.onText(/\/stats/, async (msg) => {
       stats.links.forEach((row, i) => {
         const shareLink = makeShareLink(row.code);
         const typeLabel = row.type === "multi" ? "📦 Multi" : "📄 Single";
+        const titleLine = row.title ? `   🏷️ ${row.title}\n` : "";
         text += `*${i + 1}.* \`${row.code}\` ${typeLabel}\n`;
+        text += titleLine;
         text += `   ⬇️ ${row.download_count}x · ${formatExpiry(row.expires_at)}\n`;
         text += `   🔗 ${shareLink}\n`;
         if (i < stats.links.length - 1) text += `\n`;
@@ -957,7 +990,7 @@ bot.onText(/\/replace(?:\s+(\S+))?/, async (msg, match) => {
   if (access === "forbidden")  return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki izin untuk mengedit link ini.");
 
   // Simpan state edit
-  editMode.set(userId, { action: "replace", code, storedIds: [], mediaGroups: new Map() });
+  setEditModeWithTimeout(userId, chatId, { action: "replace", code, storedIds: [], mediaGroups: new Map() });
 
   await bot.sendMessage(
     chatId,
@@ -997,7 +1030,7 @@ bot.onText(/\/addfile(?:\s+(\S+))?/, async (msg, match) => {
   const raw = await getRawLink(code);
   const currentCount = raw.type === "single" ? 1 : raw.data.ids.length;
 
-  editMode.set(userId, { action: "add", code, mediaGroups: new Map() });
+  setEditModeWithTimeout(userId, chatId, { action: "add", code, mediaGroups: new Map() });
 
   await bot.sendMessage(
     chatId,
@@ -1124,7 +1157,7 @@ bot.onText(/\/canceledit/, async (msg) => {
     return bot.sendMessage(chatId, "⚠️ Tidak ada sesi edit yang aktif.");
   }
 
-  editMode.delete(userId);
+  deleteEditMode(userId);
   await bot.sendMessage(chatId, "❌ Sesi edit dibatalkan.");
 });
 
@@ -1407,7 +1440,7 @@ bot.onText(/\/multi/, async (msg) => {
     );
   }
 
-  multiMode.set(userId, { storedIds: [], mediaGroups: new Map() });
+  setMultiModeWithTimeout(userId, chatId, { storedIds: [], mediaGroups: new Map() });
 
   await bot.sendMessage(
     chatId,
@@ -1427,7 +1460,7 @@ bot.onText(/\/done/, async (msg) => {
   // ── Selesaikan sesi editMode (replace / add) ────────────────────────────
   if (editMode.has(userId)) {
     const session = editMode.get(userId);
-    editMode.delete(userId);
+    deleteEditMode(userId);
 
     // REPLACE: simpan semua file yang sudah dikumpulkan
     if (session.action === "replace") {
@@ -1507,7 +1540,7 @@ bot.onText(/\/done/, async (msg) => {
   }
 
   const session = multiMode.get(userId);
-  multiMode.delete(userId);
+  deleteMultiMode(userId);
 
   if (session.storedIds.length === 0) {
     return bot.sendMessage(chatId, "⚠️ Belum ada file yang dikirim. Sesi dibatalkan.");
@@ -1562,7 +1595,7 @@ bot.onText(/\/cancel$/, async (msg) => {
     return bot.sendMessage(chatId, "⚠️ Tidak ada sesi aktif yang bisa dibatalkan.");
   }
 
-  multiMode.delete(userId);
+  deleteMultiMode(userId);
   await bot.sendMessage(chatId, "❌ Sesi multi file dibatalkan.");
 });
 
@@ -1866,6 +1899,22 @@ initDB()
     });
     // Mulai polling setelah DB siap
     startPolling();
+
+    // ── Cleanup job: hapus session & link expired setiap 1 jam ──────────────
+    setInterval(async () => {
+      try {
+        const r1 = await pool.query("DELETE FROM ad_sessions WHERE expires_at < NOW()");
+        const r2 = await pool.query(
+          "DELETE FROM links WHERE expires_at IS NOT NULL AND expires_at < NOW()"
+        );
+        const n1 = r1.rowCount, n2 = r2.rowCount;
+        if (n1 > 0 || n2 > 0) {
+          console.log(`[CLEANUP] Hapus ${n1} session & ${n2} link expired`);
+        }
+      } catch (err) {
+        console.error("[CLEANUP] Error:", err.message);
+      }
+    }, 60 * 60 * 1000); // setiap 1 jam
   })
   .catch((err) => {
     console.error("❌ Gagal koneksi database:", err.message);
