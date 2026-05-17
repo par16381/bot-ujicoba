@@ -267,7 +267,6 @@
   const adUrl       = decodeURIComponent(params.get('ad')      || '');
   const backendUrl  = decodeURIComponent(params.get('backend') || '');
   const botUsername = params.get('bot') || '';
-  const linkTitle   = decodeURIComponent(params.get('title')   || '');
 
   // ── Telegram WebApp SDK ───────────────────────────────
   const tg     = window.Telegram?.WebApp;
@@ -485,8 +484,9 @@
         return;
       }
 
-      // Update info file
-      const n = data.fileCount || 1;
+      // Update info file — title diambil dari response /linkinfo, bukan URL
+      const n         = data.fileCount || 1;
+      const linkTitle = data.title || "";
       const titleHtml = linkTitle
         ? `<strong>🏷️ ${linkTitle}</strong><br>`
         : "";
