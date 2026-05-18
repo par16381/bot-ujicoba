@@ -731,6 +731,232 @@ app.get("/linkinfo", async (req, res) => {
 // Health check
 app.get("/", (req, res) => res.json({ status: "ok", bot: BOT_USERNAME }));
 
+// ─── HTTP: /dashboard/summary ──────────────────────────────────────────────
+// Ringkasan global (admin) atau milik sendiri (whitelist user)
+// Query param: user_id (wajib), init_data (opsional untuk verifikasi)
+app.get("/dashboard/summary", async (req, res) => {
+  const userId = parseInt(req.query.user_id);
+  if (!userId) return res.json({ ok: false, error: "Parameter user_id tidak lengkap." });
+
+  const isAdmin    = ADMIN_IDS.includes(userId);
+  const isWhitelist = WHITELIST_USERS.includes(userId);
+  if (!isAdmin && !isWhitelist) {
+    return res.status(403).json({ ok: false, error: "Akses ditolak." });
+  }
+
+  try {
+    if (isAdmin) {
+      const totalLinks = await pool.query("SELECT COUNT(*) FROM links");
+      const totalViews = await pool.query("SELECT COALESCE(SUM(download_count),0) as total FROM links");
+      const totalBanned = await pool.query("SELECT COUNT(*) FROM blocked_users");
+      return res.json({
+        ok: true,
+        role: "admin",
+        totalLinks:  parseInt(totalLinks.rows[0].count),
+        totalViews:  parseInt(totalViews.rows[0].total),
+        totalBanned: parseInt(totalBanned.rows[0].count),
+      });
+    } else {
+      const totalLinks = await pool.query(
+        "SELECT COUNT(*) FROM links WHERE owner_id = $1", [userId]
+      );
+      const totalViews = await pool.query(
+        "SELECT COALESCE(SUM(download_count),0) as total FROM links WHERE owner_id = $1", [userId]
+      );
+      return res.json({
+        ok: true,
+        role: "user",
+        totalLinks: parseInt(totalLinks.rows[0].count),
+        totalViews: parseInt(totalViews.rows[0].total),
+      });
+    }
+  } catch (err) {
+    console.error("[DASHBOARD/SUMMARY] Error:", err.message);
+    return res.json({ ok: false, error: "Terjadi kesalahan server." });
+  }
+});
+
+// ─── HTTP: /dashboard/chart ────────────────────────────────────────────────
+// Statistik views per hari dalam rentang tanggal
+// Query param: user_id, date_from (YYYY-MM-DD), date_to (YYYY-MM-DD)
+// Cara kerja: hitung dari ad_sessions yang verified=TRUE dalam rentang
+app.get("/dashboard/chart", async (req, res) => {
+  const userId   = parseInt(req.query.user_id);
+  const dateFrom = req.query.date_from;
+  const dateTo   = req.query.date_to;
+
+  if (!userId || !dateFrom || !dateTo) {
+    return res.json({ ok: false, error: "Parameter tidak lengkap." });
+  }
+
+  const isAdmin     = ADMIN_IDS.includes(userId);
+  const isWhitelist = WHITELIST_USERS.includes(userId);
+  if (!isAdmin && !isWhitelist) {
+    return res.status(403).json({ ok: false, error: "Akses ditolak." });
+  }
+
+  try {
+    let rows;
+    if (isAdmin) {
+      // Admin: semua claim dalam rentang
+      const result = await pool.query(
+        `SELECT DATE(created_at) as date, COUNT(*) as views
+         FROM ad_sessions
+         WHERE verified = TRUE
+           AND DATE(created_at) >= $1
+           AND DATE(created_at) <= $2
+         GROUP BY DATE(created_at)
+         ORDER BY date ASC`,
+        [dateFrom, dateTo]
+      );
+      rows = result.rows;
+    } else {
+      // Whitelist: hanya claim pada link milik user ini
+      const result = await pool.query(
+        `SELECT DATE(s.created_at) as date, COUNT(*) as views
+         FROM ad_sessions s
+         JOIN links l ON l.code = s.code
+         WHERE s.verified = TRUE
+           AND l.owner_id = $1
+           AND DATE(s.created_at) >= $2
+           AND DATE(s.created_at) <= $3
+         GROUP BY DATE(s.created_at)
+         ORDER BY date ASC`,
+        [userId, dateFrom, dateTo]
+      );
+      rows = result.rows;
+    }
+
+    return res.json({
+      ok: true,
+      data: rows.map(r => ({ date: r.date, views: parseInt(r.views) })),
+    });
+  } catch (err) {
+    console.error("[DASHBOARD/CHART] Error:", err.message);
+    return res.json({ ok: false, error: "Terjadi kesalahan server." });
+  }
+});
+
+// ─── HTTP: /dashboard/links ────────────────────────────────────────────────
+// Daftar link dengan performa — admin lihat semua, whitelist lihat milik sendiri
+// Query param: user_id, page (default 1), limit (default 10)
+app.get("/dashboard/links", async (req, res) => {
+  const userId = parseInt(req.query.user_id);
+  const page   = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit  = Math.min(50, parseInt(req.query.limit) || 10);
+  const offset = (page - 1) * limit;
+
+  if (!userId) return res.json({ ok: false, error: "Parameter user_id tidak lengkap." });
+
+  const isAdmin     = ADMIN_IDS.includes(userId);
+  const isWhitelist = WHITELIST_USERS.includes(userId);
+  if (!isAdmin && !isWhitelist) {
+    return res.status(403).json({ ok: false, error: "Akses ditolak." });
+  }
+
+  try {
+    const whereClause = isAdmin ? "" : "WHERE owner_id = $3";
+    const queryParams = isAdmin ? [limit, offset] : [limit, offset, userId];
+
+    const result = await pool.query(
+      `SELECT code, type, title, download_count, created_at, expires_at, owner_id
+       FROM links
+       ${whereClause}
+       ORDER BY download_count DESC, created_at DESC
+       LIMIT $1 OFFSET $2`,
+      queryParams
+    );
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM links ${whereClause}`,
+      isAdmin ? [] : [userId]
+    );
+
+    return res.json({
+      ok:    true,
+      total: parseInt(countResult.rows[0].count),
+      page,
+      limit,
+      links: result.rows.map(r => ({
+        code:          r.code,
+        type:          r.type,
+        title:         r.title || "",
+        download_count: r.download_count,
+        created_at:    r.created_at,
+        expires_at:    r.expires_at,
+        owner_id:      r.owner_id,
+      })),
+    });
+  } catch (err) {
+    console.error("[DASHBOARD/LINKS] Error:", err.message);
+    return res.json({ ok: false, error: "Terjadi kesalahan server." });
+  }
+});
+
+// ─── HTTP: /dashboard/link-chart ──────────────────────────────────────────
+// Statistik views per hari untuk satu link spesifik
+// Query param: user_id, code, date_from, date_to
+app.get("/dashboard/link-chart", async (req, res) => {
+  const userId   = parseInt(req.query.user_id);
+  const code     = req.query.code;
+  const dateFrom = req.query.date_from;
+  const dateTo   = req.query.date_to;
+
+  if (!userId || !code || !dateFrom || !dateTo) {
+    return res.json({ ok: false, error: "Parameter tidak lengkap." });
+  }
+
+  const isAdmin     = ADMIN_IDS.includes(userId);
+  const isWhitelist = WHITELIST_USERS.includes(userId);
+  if (!isAdmin && !isWhitelist) {
+    return res.status(403).json({ ok: false, error: "Akses ditolak." });
+  }
+
+  try {
+    // Verifikasi kepemilikan jika bukan admin
+    if (!isAdmin) {
+      const ownerCheck = await pool.query(
+        "SELECT owner_id FROM links WHERE code = $1", [code]
+      );
+      if (ownerCheck.rows.length === 0) {
+        return res.json({ ok: false, error: "Link tidak ditemukan." });
+      }
+      if (ownerCheck.rows[0].owner_id !== userId) {
+        return res.status(403).json({ ok: false, error: "Akses ditolak." });
+      }
+    }
+
+    const result = await pool.query(
+      `SELECT DATE(created_at) as date, COUNT(*) as views
+       FROM ad_sessions
+       WHERE code = $1
+         AND verified = TRUE
+         AND DATE(created_at) >= $2
+         AND DATE(created_at) <= $3
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      [code, dateFrom, dateTo]
+    );
+
+    // Ambil info link
+    const linkInfo = await pool.query(
+      "SELECT title, download_count, type FROM links WHERE code = $1", [code]
+    );
+
+    return res.json({
+      ok:    true,
+      code,
+      title: linkInfo.rows[0]?.title || "",
+      totalViews: linkInfo.rows[0]?.download_count || 0,
+      type:  linkInfo.rows[0]?.type || "single",
+      data:  result.rows.map(r => ({ date: r.date, views: parseInt(r.views) })),
+    });
+  } catch (err) {
+    console.error("[DASHBOARD/LINK-CHART] Error:", err.message);
+    return res.json({ ok: false, error: "Terjadi kesalahan server." });
+  }
+});
+
 // ─── /start ────────────────────────────────────────────────────────────────
 bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -812,6 +1038,39 @@ bot.onText(/\/start(?:\s+(\S+))?/, async (msg, match) => {
     `🖼 Foto · 🎬 Video · 📄 Dokumen · 🎵 Audio · 🎤 Voice · 🎞 GIF\n\n` +
     `📋 *Perintah lengkap:* /help`,
     { parse_mode: "Markdown" }
+  );
+});
+
+// ─── /dashboard ────────────────────────────────────────────────────────────
+bot.onText(/\/dashboard/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  const isAdmin     = ADMIN_IDS.includes(userId);
+  const isWhitelist = WHITELIST_USERS.includes(userId);
+
+  if (!isAdmin && !isWhitelist) {
+    return bot.sendMessage(chatId, "⛔ Kamu tidak memiliki akses ke dashboard.");
+  }
+
+  if (!WEBAPP_URL || !WEBAPP_BACKEND_URL) {
+    return bot.sendMessage(chatId, "❌ Konfigurasi bot belum lengkap. Hubungi admin.");
+  }
+
+  const dashboardUrl = `${WEBAPP_URL.replace("webappbot.html", "dashboard.html")}?uid=${userId}&backend=${encodeURIComponent(WEBAPP_BACKEND_URL)}`;
+
+  await bot.sendMessage(
+    chatId,
+    `📊 *Dashboard Analytics*\n\nKlik tombol di bawah untuk membuka dashboard.`,
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [[{
+          text: "📊 Buka Dashboard",
+          web_app: { url: dashboardUrl }
+        }]]
+      }
+    }
   );
 });
 
