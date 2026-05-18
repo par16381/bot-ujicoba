@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dashboard Analytics</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+    /* ── Telegram theme tokens ── */
+    :root {
+      --bg:         var(--tg-theme-bg-color,          #ffffff);
+      --bg2:        var(--tg-theme-secondary-bg-color, #f1f1f1);
+      --text:       var(--tg-theme-text-color,         #111111);
+      --hint:       var(--tg-theme-hint-color,         #888888);
+      --accent:     var(--tg-theme-button-color,       #2481cc);
+      --accent-txt: var(--tg-theme-button-text-color,  #ffffff);
+      --link:       var(--tg-theme-link-color,         #2481cc);
+
+      --surface:    color-mix(in srgb, var(--bg) 85%, var(--text) 15%);
+      --border:     color-mix(in srgb, var(--bg) 75%, var(--text) 25%);
+      --green:      #22c55e;
+      --red:        #ef4444;
+      --radius:     14px;
+      --radius-sm:  9px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 32px;
+    }
+
+    /* ── Header ── */
+    .header {
+      padding: 18px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-back {
+      width: 32px; height: 32px;
+      border: none; background: var(--bg2);
+      border-radius: 50%; cursor: pointer;
+      display: none; align-items: center; justify-content: center;
+      color: var(--text); font-size: 16px;
+      flex-shrink: 0;
+    }
+    .header-back.show { display: flex; }
+    .header-title {
+      font-size: 18px; font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .header-sub {
+      font-size: 12px; color: var(--hint);
+      margin-top: 1px;
+    }
+    .header-badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: var(--accent-txt);
+      font-size: 10px; font-weight: 600;
+      padding: 3px 8px; border-radius: 20px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* ── Loading ── */
+    #view-loading {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 60vh; gap: 14px;
+    }
+    .spinner-ring {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 13px; color: var(--hint); }
+
+    /* ── Error ── */
+    #view-error {
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 60vh; gap: 10px; padding: 20px;
+      text-align: center;
+    }
+    .error-icon { font-size: 44px; }
+    .error-title { font-size: 16px; font-weight: 600; }
+    .error-msg { font-size: 13px; color: var(--hint); }
+
+    /* ── Views ── */
+    .view { display: none; animation: fadeUp 0.25s ease forwards; }
+    .view.active { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Section ── */
+    .section { padding: 0 16px; margin-bottom: 20px; }
+    .section-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--hint); margin-bottom: 10px;
+    }
+
+    /* ── Stat cards ── */
+    .cards {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .cards.three { grid-template-columns: 1fr 1fr 1fr; }
+    .card {
+      background: var(--bg2);
+      border-radius: var(--radius);
+      padding: 14px 14px 12px;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent);
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .card.green::before { background: var(--green); }
+    .card.red::before   { background: var(--red); }
+    .card-icon { font-size: 20px; margin-bottom: 8px; display: block; }
+    .card-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 26px; font-weight: 500;
+      line-height: 1; letter-spacing: -1px;
+      color: var(--text);
+    }
+    .card-lbl {
+      font-size: 11px; color: var(--hint);
+      margin-top: 4px; font-weight: 500;
+    }
+
+    /* ── Date range picker ── */
+    .date-range {
+      display: flex; gap: 8px; align-items: center;
+      margin-bottom: 12px;
+    }
+    .date-input {
+      flex: 1;
+      background: var(--bg2); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 12px; font-size: 13px;
+      color: var(--text); font-family: 'DM Sans', sans-serif;
+      outline: none; width: 100%;
+    }
+    .date-input:focus { border-color: var(--accent); }
+    .date-sep { color: var(--hint); font-size: 13px; flex-shrink: 0; }
+    .btn-apply {
+      background: var(--accent); color: var(--accent-txt);
+      border: none; border-radius: var(--radius-sm);
+      padding: 9px 14px; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      flex-shrink: 0; white-space: nowrap;
+    }
+    .btn-apply:active { opacity: 0.8; }
+
+    /* ── Quick range buttons ── */
+    .quick-range {
+      display: flex; gap: 6px; margin-bottom: 14px;
+      overflow-x: auto; padding-bottom: 2px;
+    }
+    .quick-range::-webkit-scrollbar { display: none; }
+    .qbtn {
+      background: var(--bg2); border: 1.5px solid var(--border);
+      border-radius: 20px; padding: 5px 12px;
+      font-size: 12px; font-weight: 500; color: var(--hint);
+      cursor: pointer; white-space: nowrap;
+      font-family: 'DM Sans', sans-serif;
+      transition: all 0.15s;
+    }
+    .qbtn.active {
+      background: var(--accent); border-color: var(--accent);
+      color: var(--accent-txt);
+    }
+
+    /* ── Chart container ── */
+    .chart-wrap {
+      background: var(--bg2); border-radius: var(--radius);
+      padding: 16px; position: relative;
+    }
+    .chart-empty {
+      text-align: center; padding: 30px 0;
+      font-size: 13px; color: var(--hint);
+      display: none;
+    }
+
+    /* ── Link list ── */
+    .link-list { display: flex; flex-direction: column; gap: 8px; }
+    .link-item {
+      background: var(--bg2); border-radius: var(--radius);
+      padding: 13px 14px;
+      display: flex; align-items: center; gap: 12px;
+      cursor: pointer; transition: opacity 0.15s;
+      border: 1.5px solid transparent;
+    }
+    .link-item:active { opacity: 0.7; }
+    .link-rank {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px; color: var(--hint);
+      width: 20px; flex-shrink: 0; text-align: center;
+    }
+    .link-info { flex: 1; min-width: 0; }
+    .link-title {
+      font-size: 13px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .link-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px; color: var(--hint); margin-top: 2px;
+    }
+    .link-views {
+      font-family: 'DM Mono', monospace;
+      font-size: 15px; font-weight: 500;
+      color: var(--accent); flex-shrink: 0;
+      text-align: right;
+    }
+    .link-views-lbl {
+      font-size: 10px; color: var(--hint);
+      text-align: right; margin-top: 1px;
+    }
+    .link-arrow { color: var(--hint); font-size: 14px; flex-shrink: 0; }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex; justify-content: center;
+      gap: 8px; margin-top: 14px;
+    }
+    .page-btn {
+      background: var(--bg2); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 14px; font-size: 13px;
+      color: var(--text); cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .page-info { font-size: 12px; color: var(--hint); align-self: center; }
+
+    /* ── Detail view ── */
+    .detail-summary {
+      background: var(--bg2); border-radius: var(--radius);
+      padding: 16px; margin-bottom: 14px;
+    }
+    .detail-title {
+      font-size: 16px; font-weight: 700; margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .detail-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px; color: var(--hint); margin-bottom: 12px;
+    }
+    .detail-stat {
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .detail-stat-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 32px; font-weight: 500;
+      letter-spacing: -1.5px; color: var(--accent);
+    }
+    .detail-stat-lbl { font-size: 13px; color: var(--hint); }
+
+    /* ── Skeleton loader ── */
+    .skeleton {
+      background: linear-gradient(
+        90deg,
+        var(--bg2) 25%,
+        var(--border) 50%,
+        var(--bg2) 75%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to   { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header" id="header">
+  <button class="header-back" id="btn-back">←</button>
+  <div>
+    <div class="header-title" id="header-title">Analytics</div>
+    <div class="header-sub" id="header-sub">File Share Bot</div>
+  </div>
+  <span class="header-badge" id="header-badge">Admin</span>
+</div>
+
+<!-- ══ LOADING ══ -->
+<div id="view-loading">
+  <div class="spinner-ring"></div>
+  <div class="loading-text">Memuat dashboard...</div>
+</div>
+
+<!-- ══ ERROR ══ -->
+<div id="view-error">
+  <span class="error-icon">⚠️</span>
+  <div class="error-title">Akses Ditolak</div>
+  <div class="error-msg" id="error-msg">Kamu tidak memiliki akses ke dashboard ini.</div>
+</div>
+
+<!-- ══ VIEW: MAIN DASHBOARD ══ -->
+<div class="view" id="view-main">
+
+  <!-- Summary cards -->
+  <div class="section">
+    <div class="section-label">Ringkasan</div>
+    <div class="cards" id="summary-cards">
+      <!-- Diisi JS -->
+    </div>
+  </div>
+
+  <!-- Global chart -->
+  <div class="section">
+    <div class="section-label">Statistik Views</div>
+    <div class="quick-range" id="quick-range">
+      <button class="qbtn" data-days="7">7 Hari</button>
+      <button class="qbtn active" data-days="30">30 Hari</button>
+      <button class="qbtn" data-days="90">3 Bulan</button>
+      <button class="qbtn" data-days="365">1 Tahun</button>
+    </div>
+    <div class="date-range">
+      <input type="date" class="date-input" id="date-from">
+      <span class="date-sep">→</span>
+      <input type="date" class="date-input" id="date-to">
+      <button class="btn-apply" id="btn-apply-range">Terapkan</button>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart-global" height="180"></canvas>
+      <div class="chart-empty" id="chart-global-empty">
+        Tidak ada data pada rentang ini
+      </div>
+    </div>
+  </div>
+
+  <!-- Link list -->
+  <div class="section">
+    <div class="section-label">Performa Link</div>
+    <div class="link-list" id="link-list">
+      <!-- Diisi JS -->
+    </div>
+    <div class="pagination" id="pagination" style="display:none;">
+      <button class="page-btn" id="btn-prev">← Prev</button>
+      <span class="page-info" id="page-info"></span>
+      <button class="page-btn" id="btn-next">Next →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ VIEW: LINK DETAIL ══ -->
+<div class="view" id="view-detail">
+
+  <div class="section">
+    <div class="detail-summary" id="detail-summary">
+      <!-- Diisi JS -->
+    </div>
+
+    <div class="section-label" style="margin-bottom:10px;">Statistik Views Per Hari</div>
+    <div class="quick-range" id="detail-quick-range">
+      <button class="qbtn" data-days="7">7 Hari</button>
+      <button class="qbtn active" data-days="30">30 Hari</button>
+      <button class="qbtn" data-days="90">3 Bulan</button>
+    </div>
+    <div class="date-range">
+      <input type="date" class="date-input" id="detail-date-from">
+      <span class="date-sep">→</span>
+      <input type="date" class="date-input" id="detail-date-to">
+      <button class="btn-apply" id="btn-apply-detail">Terapkan</button>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart-detail" height="180"></canvas>
+      <div class="chart-empty" id="chart-detail-empty">
+        Tidak ada data pada rentang ini
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  DASHBOARD ANALYTICS — Telegram Mini App
+// ════════════════════════════════════════════════════════
+
+const tg         = window.Telegram?.WebApp;
+const params     = new URLSearchParams(location.search);
+const userId     = tg?.initDataUnsafe?.user?.id || parseInt(params.get('uid')) || null;
+const backendUrl = decodeURIComponent(params.get('backend') || '');
+
+let globalChart = null;
+let detailChart = null;
+let currentPage = 1;
+let totalPages  = 1;
+let currentDetailCode = null;
+
+// ── Helpers ──────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const fmt = n  => n?.toLocaleString('id-ID') ?? '0';
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const el = $(id);
+  if (el) el.classList.add('active');
+}
+
+function showError(msg) {
+  $('view-loading').style.display = 'none';
+  $('view-error').style.display   = 'flex';
+  $('error-msg').textContent      = msg;
+}
+
+function dateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n + 1);
+  return dateStr(d);
+}
+
+function today() { return dateStr(new Date()); }
+
+function fmtDate(str) {
+  const d = new Date(str);
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+}
+
+// ── Chart theme dari Telegram ─────────────────────────
+function getChartColors() {
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent').trim() || '#2481cc';
+  return { accent };
+}
+
+function buildChart(canvasId, labels, values, emptyId) {
+  const canvas = $(canvasId);
+  const empty  = $(emptyId);
+  const ctx    = canvas.getContext('2d');
+  const { accent } = getChartColors();
+
+  // Hapus chart lama
+  const existing = Chart.getChart(canvas);
+  if (existing) existing.destroy();
+
+  if (values.length === 0 || values.every(v => v === 0)) {
+    canvas.style.display = 'none';
+    empty.style.display  = 'block';
+    return null;
+  }
+
+  canvas.style.display = 'block';
+  empty.style.display  = 'none';
+
+  const textColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--hint').trim() || '#888';
+  const borderColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--border').trim() || '#ddd';
+
+  return new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: accent + '33',
+        borderColor:     accent,
+        borderWidth:     2,
+        borderRadius:    5,
+        borderSkipped:   false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => items[0].label,
+            label: item  => ` ${fmt(item.raw)} views`,
+          },
+          backgroundColor: getComputedStyle(document.documentElement)
+            .getPropertyValue('--bg2').trim() || '#f1f1f1',
+          titleColor: getComputedStyle(document.documentElement)
+            .getPropertyValue('--text').trim() || '#111',
+          bodyColor: getComputedStyle(document.documentElement)
+            .getPropertyValue('--text').trim() || '#111',
+          borderColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: textColor, font: { size: 11, family: 'DM Sans' },
+            maxRotation: 0,
+            maxTicksLimit: 7,
+          },
+          grid: { display: false },
+          border: { display: false },
+        },
+        y: {
+          ticks: {
+            color: textColor, font: { size: 11, family: 'DM Mono' },
+            maxTicksLimit: 5,
+            callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v,
+          },
+          grid: { color: borderColor + '66' },
+          border: { display: false },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+// ── Fetch helpers ─────────────────────────────────────
+async function apiFetch(path) {
+  const res  = await fetch(`${backendUrl}${path}`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Terjadi kesalahan');
+  return data;
+}
+
+// ── Isi tanggal default ───────────────────────────────
+function setDefaultDates() {
+  $('date-from').value = daysAgo(30);
+  $('date-to').value   = today();
+  $('detail-date-from').value = daysAgo(30);
+  $('detail-date-to').value   = today();
+}
+
+// ── Load summary ─────────────────────────────────────
+async function loadSummary() {
+  const data = await apiFetch(`/dashboard/summary?user_id=${userId}`);
+
+  const isAdmin = data.role === 'admin';
+  $('header-badge').textContent = isAdmin ? 'Admin' : 'User';
+
+  const cards = $('summary-cards');
+
+  if (isAdmin) {
+    cards.className = 'cards three';
+    cards.innerHTML = `
+      <div class="card">
+        <span class="card-icon">🔗</span>
+        <div class="card-val">${fmt(data.totalLinks)}</div>
+        <div class="card-lbl">Total Link</div>
+      </div>
+      <div class="card green">
+        <span class="card-icon">👁️</span>
+        <div class="card-val">${fmt(data.totalViews)}</div>
+        <div class="card-lbl">Total Views</div>
+      </div>
+      <div class="card red">
+        <span class="card-icon">🚫</span>
+        <div class="card-val">${fmt(data.totalBanned)}</div>
+        <div class="card-lbl">User Banned</div>
+      </div>
+    `;
+  } else {
+    cards.className = 'cards';
+    cards.innerHTML = `
+      <div class="card">
+        <span class="card-icon">🔗</span>
+        <div class="card-val">${fmt(data.totalLinks)}</div>
+        <div class="card-lbl">Total Link</div>
+      </div>
+      <div class="card green">
+        <span class="card-icon">👁️</span>
+        <div class="card-val">${fmt(data.totalViews)}</div>
+        <div class="card-lbl">Total Views</div>
+      </div>
+    `;
+  }
+}
+
+// ── Load global chart ─────────────────────────────────
+async function loadGlobalChart() {
+  const from = $('date-from').value;
+  const to   = $('date-to').value;
+  if (!from || !to) return;
+
+  const data = await apiFetch(
+    `/dashboard/chart?user_id=${userId}&date_from=${from}&date_to=${to}`
+  );
+
+  const labels = data.data.map(d => fmtDate(d.date));
+  const values = data.data.map(d => d.views);
+  globalChart  = buildChart('chart-global', labels, values, 'chart-global-empty');
+}
+
+// ── Load link list ────────────────────────────────────
+async function loadLinks(page = 1) {
+  currentPage = page;
+  const data  = await apiFetch(
+    `/dashboard/links?user_id=${userId}&page=${page}&limit=10`
+  );
+
+  totalPages = Math.ceil(data.total / data.limit) || 1;
+
+  const list = $('link-list');
+  if (data.links.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--hint);font-size:13px;">Belum ada link</div>`;
+    $('pagination').style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = data.links.map((link, i) => {
+    const rank  = (page - 1) * 10 + i + 1;
+    const title = link.title || link.code;
+    return `
+      <div class="link-item" onclick="openDetail('${link.code}')">
+        <div class="link-rank">#${rank}</div>
+        <div class="link-info">
+          <div class="link-title">${title}</div>
+          <div class="link-code">${link.code} · ${link.type}</div>
+        </div>
+        <div>
+          <div class="link-views">${fmt(link.download_count)}</div>
+          <div class="link-views-lbl">views</div>
+        </div>
+        <div class="link-arrow">›</div>
+      </div>
+    `;
+  }).join('');
+
+  // Pagination
+  const pag = $('pagination');
+  if (totalPages > 1) {
+    pag.style.display = 'flex';
+    $('page-info').textContent = `${page} / ${totalPages}`;
+    $('btn-prev').disabled = page <= 1;
+    $('btn-next').disabled = page >= totalPages;
+  } else {
+    pag.style.display = 'none';
+  }
+}
+
+// ── Load detail link ──────────────────────────────────
+async function openDetail(code) {
+  currentDetailCode = code;
+
+  // Tampilkan view detail
+  $('btn-back').classList.add('show');
+  $('header-title').textContent = 'Detail Link';
+  $('header-sub').textContent   = code;
+  showView('view-detail');
+
+  // Reset detail chart
+  const canvas = $('chart-detail');
+  const existing = Chart.getChart(canvas);
+  if (existing) existing.destroy();
+  canvas.style.display          = 'block';
+  $('chart-detail-empty').style.display = 'none';
+
+  // Loading skeleton
+  $('detail-summary').innerHTML = `
+    <div class="skeleton" style="height:18px;width:60%;margin-bottom:8px;"></div>
+    <div class="skeleton" style="height:12px;width:40%;margin-bottom:16px;"></div>
+    <div class="skeleton" style="height:36px;width:30%;"></div>
+  `;
+
+  await loadDetailChart();
+}
+
+async function loadDetailChart() {
+  const from = $('detail-date-from').value;
+  const to   = $('detail-date-to').value;
+  const code = currentDetailCode;
+
+  const data = await apiFetch(
+    `/dashboard/link-chart?user_id=${userId}&code=${code}&date_from=${from}&date_to=${to}`
+  );
+
+  // Isi summary
+  const title = data.title || code;
+  $('detail-summary').innerHTML = `
+    <div class="detail-title">${title}</div>
+    <div class="detail-code">${code} · ${data.type}</div>
+    <div class="detail-stat">
+      <div class="detail-stat-val">${fmt(data.totalViews)}</div>
+      <div class="detail-stat-lbl">total views</div>
+    </div>
+  `;
+
+  const labels = data.data.map(d => fmtDate(d.date));
+  const values = data.data.map(d => d.views);
+  detailChart  = buildChart('chart-detail', labels, values, 'chart-detail-empty');
+}
+
+// ── Quick range handler ───────────────────────────────
+function setupQuickRange(containerSelector, fromId, toId, onApply) {
+  const btns = document.querySelectorAll(`#${containerSelector} .qbtn`);
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const days = parseInt(btn.dataset.days);
+      $(fromId).value = daysAgo(days);
+      $(toId).value   = today();
+      onApply();
+    });
+  });
+}
+
+// ── Back button ───────────────────────────────────────
+$('btn-back').addEventListener('click', () => {
+  $('btn-back').classList.remove('show');
+  $('header-title').textContent = 'Analytics';
+  $('header-sub').textContent   = 'File Share Bot';
+  currentDetailCode = null;
+  showView('view-main');
+});
+
+// ── Apply range buttons ───────────────────────────────
+$('btn-apply-range').addEventListener('click', loadGlobalChart);
+$('btn-apply-detail').addEventListener('click', loadDetailChart);
+
+// ── Pagination ────────────────────────────────────────
+$('btn-prev').addEventListener('click', () => loadLinks(currentPage - 1));
+$('btn-next').addEventListener('click', () => loadLinks(currentPage + 1));
+
+// ── INIT ─────────────────────────────────────────────
+async function init() {
+  if (tg) { tg.ready(); tg.expand(); }
+
+  if (!userId) {
+    showError('User ID tidak ditemukan. Buka dashboard dari dalam bot Telegram.');
+    return;
+  }
+
+  if (!backendUrl) {
+    showError('Konfigurasi backend tidak lengkap. Hubungi admin bot.');
+    return;
+  }
+
+  setDefaultDates();
+  setupQuickRange('quick-range',        'date-from',        'date-to',        loadGlobalChart);
+  setupQuickRange('detail-quick-range', 'detail-date-from', 'detail-date-to', loadDetailChart);
+
+  try {
+    await loadSummary();
+    await Promise.all([loadGlobalChart(), loadLinks(1)]);
+
+    $('view-loading').style.display = 'none';
+    showView('view-main');
+  } catch (err) {
+    showError(err.message || 'Gagal memuat dashboard.');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
