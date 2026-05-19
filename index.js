@@ -839,12 +839,13 @@ app.get("/dashboard/chart", async (req, res) => {
 
 // ─── HTTP: /dashboard/links ────────────────────────────────────────────────
 // Daftar link dengan performa — admin lihat semua, whitelist lihat milik sendiri
-// Query param: user_id, page (default 1), limit (default 10)
+// Query param: user_id, page (default 1), limit (default 10), search (opsional)
 app.get("/dashboard/links", async (req, res) => {
   const userId = parseInt(req.query.user_id);
   const page   = Math.max(1, parseInt(req.query.page)  || 1);
   const limit  = Math.min(50, parseInt(req.query.limit) || 10);
   const offset = (page - 1) * limit;
+  const search = req.query.search?.trim() || "";
 
   if (!userId) return res.json({ ok: false, error: "Parameter user_id tidak lengkap." });
 
@@ -855,21 +856,42 @@ app.get("/dashboard/links", async (req, res) => {
   }
 
   try {
-    const whereClause = isAdmin ? "" : "WHERE owner_id = $3";
-    const queryParams = isAdmin ? [limit, offset] : [limit, offset, userId];
+    // Bangun kondisi WHERE secara dinamis
+    const conditions = [];
+    const values     = [];
 
+    // Filter owner jika bukan admin
+    if (!isAdmin) {
+      values.push(userId);
+      conditions.push(`owner_id = $${values.length}`);
+    }
+
+    // Filter search: cocokkan title ILIKE atau code ILIKE
+    if (search) {
+      values.push(`%${search}%`);
+      const idx = values.length;
+      conditions.push(`(title ILIKE $${idx} OR code ILIKE $${idx})`);
+    }
+
+    const whereClause = conditions.length > 0
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    // Query data dengan limit & offset
+    const dataValues = [...values, limit, offset];
     const result = await pool.query(
       `SELECT code, type, title, download_count, created_at, expires_at, owner_id
        FROM links
        ${whereClause}
        ORDER BY download_count DESC, created_at DESC
-       LIMIT $1 OFFSET $2`,
-      queryParams
+       LIMIT $${dataValues.length - 1} OFFSET $${dataValues.length}`,
+      dataValues
     );
 
+    // Query total count (tanpa limit)
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM links ${whereClause}`,
-      isAdmin ? [] : [userId]
+      values
     );
 
     return res.json({
@@ -877,14 +899,15 @@ app.get("/dashboard/links", async (req, res) => {
       total: parseInt(countResult.rows[0].count),
       page,
       limit,
+      search,
       links: result.rows.map(r => ({
-        code:          r.code,
-        type:          r.type,
-        title:         r.title || "",
+        code:           r.code,
+        type:           r.type,
+        title:          r.title || "",
         download_count: r.download_count,
-        created_at:    r.created_at,
-        expires_at:    r.expires_at,
-        owner_id:      r.owner_id,
+        created_at:     r.created_at,
+        expires_at:     r.expires_at,
+        owner_id:       r.owner_id,
       })),
     });
   } catch (err) {
